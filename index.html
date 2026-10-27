@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1424">
-<title>Sensor Mouse Lab v4 — Fixed Plane & Distance</title>
+<title>Sensor Mouse Lab v5 — Diagnostics</title>
 <style>
 :root{color-scheme:dark;font:15px/1.55 system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#0b1424;color:#e9f0fc}
 *{box-sizing:border-box}body{max-width:1060px;margin:auto;padding:14px}h1{font-size:1.6rem;margin:.2rem 0}h2{font-size:1.06rem;margin:0 0 12px}p{margin:8px 0;color:#adbed5}small,.sub{color:#98b2cf}.pill{display:inline-block;border:1px solid #54748c;border-radius:18px;padding:3px 8px;font-size:.75rem;color:#8be6d3}
 main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13px;margin-top:13px}.panel{border:1px solid #33455d;border-radius:14px;background:#172438;padding:16px;margin-bottom:13px;min-width:0}.panel p{font-size:.83rem}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.row.space{justify-content:space-between}button,select{background:#25405f;border:1px solid #56718c;border-radius:9px;color:#f4f7fe;padding:9px 12px;font:inherit;cursor:pointer}button.primary{background:#138875;border-color:#5acabb}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #6bdbda;outline-offset:2px}button:disabled{opacity:.5;cursor:not-allowed}
 #viewport{position:relative;width:100%;height:380px;border:1px solid #53728d;border-radius:11px;overflow:hidden;background:#09182b;touch-action:none;user-select:none}#plane{display:block;width:100%;height:100%}#viewportLabel{position:absolute;bottom:8px;left:8px;background:#101e33d9;padding:4px 8px;border-radius:6px;color:#b6cae0;font-size:.72rem;pointer-events:none}
-.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}.metric{border-radius:8px;background:#0c1b2d;text-align:center;padding:8px 4px;min-width:0}.metric strong{font-variant-numeric:tabular-nums;font-size:1.1rem;display:block;color:#78e4d3}.metric span{font-size:.7rem;color:#96afc9}.stat{border-left:3px solid #57cfc4;padding:8px 10px;background:#1b3246;border-radius:4px;font-size:.8rem;color:#d4e8ed;min-height:36px}.stat.warning{border-color:#ecaf67}.setting{padding:9px 0;border-bottom:1px solid #344559}.setting label{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:.86rem}.setting output{font-variant-numeric:tabular-nums;color:#83eadb}.setting input[type=range]{width:100%;accent-color:#66ded0}.check{display:flex;gap:7px;align-items:center;margin:8px 0;font-size:.87rem}.check input{accent-color:#64d9c6}#graph{display:block;background:#0b192b;width:100%;height:125px;border-radius:9px}#log{max-height:110px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;color:#bbcfdf;background:#101c2d;border-radius:8px;padding:8px}.help{font-size:.78rem;color:#9cb3ce}footer{font-size:.8rem;color:#94afc5;margin:18px 0 26px}a{color:#8eece0}select{max-width:100%}@media(max-width:760px){main{display:block}#viewport{height:340px}body{padding:10px}.panel{padding:12px}.metric strong{font-size:1rem}}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}.metric{border-radius:8px;background:#0c1b2d;text-align:center;padding:8px 4px;min-width:0}.metric strong{font-variant-numeric:tabular-nums;font-size:1.1rem;display:block;color:#78e4d3}.metric span{font-size:.7rem;color:#96afc9}.stat{border-left:3px solid #57cfc4;padding:8px 10px;background:#1b3246;border-radius:4px;font-size:.8rem;color:#d4e8ed;min-height:36px}.stat.warning{border-color:#ecaf67}.setting{padding:9px 0;border-bottom:1px solid #344559}.setting label{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:.86rem}.setting output{font-variant-numeric:tabular-nums;color:#83eadb}.setting input[type=range]{width:100%;accent-color:#66ded0}.check{display:flex;gap:7px;align-items:center;margin:8px 0;font-size:.87rem}.check input{accent-color:#64d9c6}#graph{display:block;background:#0b192b;width:100%;height:125px;border-radius:9px}#recordState{font-variant-numeric:tabular-nums}input[type=number]{width:94px;background:#0c1b2d;border:1px solid #59718b;border-radius:7px;color:#e9f0fc;padding:7px} .diagActions{margin-top:11px} .diagActions button{flex-grow:1} #log{max-height:110px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;color:#bbcfdf;background:#101c2d;border-radius:8px;padding:8px}.help{font-size:.78rem;color:#9cb3ce}footer{font-size:.8rem;color:#94afc5;margin:18px 0 26px}a{color:#8eece0}select{max-width:100%}@media(max-width:760px){main{display:block}#viewport{height:340px}body{padding:10px}.panel{padding:12px}.metric strong{font-size:1rem}}
 </style>
 </head>
 <body>
 <header>
-<span class="pill">IMU v4 · アンカー座標系 / 二重積分 / 自動静止補正</span>
+<span class="pill">IMU v5 · 基準平面 / 二重積分 / 内部データの診断</span>
 <h1>Sensor Mouse Lab</h1>
 <p>初回補正時の端末XY平面を基準に固定し、移動量を拡大表示します。ブラウザ内の検証専用で、PCのマウスやBluetoothには接続しません。</p>
 </header>
@@ -36,6 +36,27 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 </div>
 <div class="row"><button data-dir="left">← 模擬</button><button data-dir="up">↑</button><button data-dir="down">↓</button><button data-dir="right">→</button><button id="testPulse">往復移動テスト</button><button id="clearTrail">軌跡消去</button></div>
 <p class="help">模擬ボタンは押している間、一定の加速度を加えます。「往復移動テスト」は正負対称の加速度から、移動と停止を再現します。表示は常に広域座標から計算し、画面外へ移動しても座標は失われません。</p>
+</section>
+<section class="panel" id="diagnostics">
+<h2>内部データ記録 <span class="pill">診断用 / 端末内のみ</span></h2>
+<p>センサーの生値・姿勢・重力補正・自動補正判定・積分値を同一時間軸に記録します。実際の位置はセンサーからは直接分からないため、定規などで測った移動距離を手入力して比較できます。</p>
+<div class="row diagActions">
+<button class="primary" id="recordStart">● 記録開始</button>
+<button id="recordStop" disabled>■ 記録停止</button>
+<button id="csvExport" disabled>CSV保存</button>
+<button id="jsonExport" disabled>JSON保存</button>
+<button id="recordClear">記録破棄</button>
+</div>
+<p id="recordState" class="stat" role="status" aria-live="polite">未記録（最大12,000サンプル）。開始ボタンを押した後、初回補正も記録できます。</p>
+<div class="row" style="margin-top:10px">
+<button id="trialStart">移動開始マーク</button><button id="trialTurn">折り返しマーク</button><button id="trialEnd">移動終了マーク</button>
+</div>
+<div class="row" style="margin-top:9px">
+<label for="actualX">実測 X (cm) <input type="number" id="actualX" step="0.1" placeholder="未入力" inputmode="decimal"></label>
+<label for="actualY">実測 Y (cm) <input type="number" id="actualY" step="0.1" placeholder="未入力" inputmode="decimal"></label>
+</div>
+<p id="trialResult" class="stat">マークを付けると、区間内の推定変位と、入力した実測変位との差を表示します。</p>
+<p class="help">CSVは各時刻の数値比較用、JSONは補正サンプル・設定・イベントマークを含む解析用です。記録データはサーバーに送信せず、ブラウザを閉じれば失われます。共有する場合は、センサー値・時刻・操作状況が含まれる点に注意してください。マークのための画面操作そのものもセンサーに反映されます。</p>
 </section>
 <section class="panel">
 <h2>補正データと動作状態</h2>
@@ -74,7 +95,7 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 </section>
 </div>
 </main>
-<footer>zlib License · <a href="https://github.com/soone-y/Android-Mouse-PC-">Android-Mouse-PC-</a> · センサーデータの送信・収集・サーバー保存なし。設定のみブラウザ内に保存。</footer>
+<footer>zlib License · <a href="https://github.com/soone-y/Android-Mouse-PC-">Android-Mouse-PC-</a> · センサーデータの送信・収集・サーバー保存なし。設定のみブラウザ内に保存。測定ログはメモリ内だけに保持し、明示的な操作で端末へ書き出します。</footer>
 <script>
 'use strict';
 // Core math is standalone for Node-based smoke tests.
@@ -180,30 +201,77 @@ class StationaryMatcher {
  return {matched:this.matched,correction,accErr,gyroErr,avgGyro:avG,spreadA};
  }
 }
-if(typeof module!=='undefined'&&module.exports)module.exports={Q,MadgwickAHRS,SensorFusion,DistanceProcessor,StationaryMatcher};
+/** Memory-only diagnostic session. Samples are bounded and never uploaded. */
+class DiagnosticRecorder {
+ constructor(maxSamples=12000){this.maxSamples=maxSamples;this.reset()}
+ reset(){this.active=false;this.samples=[];this.events=[];this.startedMs=null;this.stoppedMs=null;this.startedWallMs=null;this.settings={};this.calibration=null;this.reason='';}
+ start(now,settings,calibration=null){this.reset();this.active=true;this.startedMs=now;this.startedWallMs=Date.now();this.settings=JSON.parse(JSON.stringify(settings));this.setCalibration(calibration);this.mark('recording_start',now);}
+ setCalibration(reference){if(!reference)return;this.calibration=JSON.parse(JSON.stringify(reference));}
+ mark(name,t,detail={}){if(this.startedMs===null)return;this.events.push({t_ms:+(t-this.startedMs).toFixed(3),event:name,...detail});}
+ append(t,data){if(!this.active)return false;if(this.samples.length>=this.maxSamples){this.stop(t,'sample_limit');return false;}this.samples.push({t_ms:+(t-this.startedMs).toFixed(3),...data});return true;}
+ stop(t,reason='manual'){if(this.startedMs===null)return;this.mark('recording_stop',t,{reason});this.active=false;this.stoppedMs=t;this.reason=reason;}
+ snapshot(){return {schema:'sensor-mouse-v5-diagnostics/1',units:{acceleration:'m/s^2',angularVelocity:'rad/s',position:'m',velocity:'m/s',time:'ms'},startedAt:new Date(this.startedWallMs).toISOString(),durationMs:(this.stoppedMs??performance.now())-this.startedMs,settingsAtStart:this.settings,calibration:this.calibration,events:this.events,samples:this.samples,reason:this.reason}}
+}
+if(typeof module!=='undefined'&&module.exports)module.exports={Q,MadgwickAHRS,SensorFusion,DistanceProcessor,StationaryMatcher,DiagnosticRecorder};
 </script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),C=$('plane'),G=$('graph'),ctx=C.getContext('2d'),gc=G.getContext('2d');
-const fusion=new SensorFusion(),motion=new DistanceProcessor(),matcher=new StationaryMatcher();
+const fusion=new SensorFusion(),motion=new DistanceProcessor(),matcher=new StationaryMatcher(),recorder=new DiagnosticRecorder();
 const defaults={mode:'INTEGRATED',scale:2500,gain:100,dead:6,smooth:14,friction:80,stationary:12,hold:50,beta:10,match:35,auto:true,native:true,invertX:false,invertY:true};
 const state={active:false,anchor:null,cal:null,pos:[0,0],cam:[0,0],trail:[],lastEvent:null,accXY:[0,0],latestRaw:null,latestGyro:null,shift:[0,0],sim:[0,0],simTime:null,calSamples:0,fixCount:0,statusStamp:0,history:[],touch:null,autoTest:null,input:'なし'};
 try{const settings=JSON.parse(localStorage.getItem('sensorMouse-v4')||'{}');for(const k in defaults){if(typeof settings[k]===typeof defaults[k]){if(typeof defaults[k]==='boolean')$(k).checked=settings[k];else $(k).value=settings[k]}else if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k]}}
 catch{for(const k in defaults){if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k]}}
 function settings(){return {mode:$('mode').value,scale:+$('scale').value,gain:+$('gain').value/100, directGain:(+$('gain').value/100)*100,dead:+$('dead').value/100,smooth:+$('smooth').value,friction:+$('friction').value/100,stationary:+$('stationary').value/100,hold:+$('hold').value/100,match:+$('match').value/100,auto:$('auto').checked,native:$('native').checked,invertX:$('invertX').checked,invertY:$('invertY').checked}}
 function label(){for(const [k,fmt] of Object.entries({scale:v=>v+' px/m',gain:v=>v+'%',dead:v=>(v/100).toFixed(2)+' m/s²',smooth:v=>v+' Hz',friction:v=>(v/100).toFixed(2)+' /s',stationary:v=>(v/100).toFixed(2)+' m/s²',hold:v=>(v/100).toFixed(2)+' s',beta:v=>(v/100).toFixed(2),match:v=>(v/100).toFixed(2)+' m/s²'}))$(k+'V').textContent=fmt(+$(k).value)}
-function persist(){const o={};for(const k in defaults)o[k]=typeof defaults[k]==='boolean'?$(k).checked:typeof defaults[k]==='number'?+$(k).value:$(k).value;try{localStorage.setItem('sensorMouse-v4',JSON.stringify(o))}catch{}}
+function persist(){if(recorder.active)traceEvent('settings_changed',{settings:settings()});const o={};for(const k in defaults)o[k]=typeof defaults[k]==='boolean'?$(k).checked:typeof defaults[k]==='number'?+$(k).value:$(k).value;try{localStorage.setItem('sensorMouse-v4',JSON.stringify(o))}catch{}}
 for(const k in defaults)$(k).addEventListener('input',()=>{label();persist();fusion.filter.beta=+$('beta').value/100;if(k==='mode')motion.resetVelocity()});label();fusion.filter.beta=+$('beta').value/100;
 function status(s,warn=false){$('status').textContent=s;$('status').className='stat'+(warn?' warning':'')}
 function log(s){const a=new Date();$('log').textContent=a.toLocaleTimeString()+' '+s+'\n'+$('log').textContent.slice(0,800)}
-function reorigin(){motion.reset();state.pos=[0,0];state.cam=[0,0];state.trail=[];status('座標を原点に戻しました。初期補正の姿勢基準は維持します。')}
+const readVector=v=>v&&v.length===3?v:[null,null,null];
+const numbers=(pre,v)=>Object.fromEntries(readVector(v).map((n,i)=>[pre+'_'+['x','y','z'][i],n]));
+function traceEvent(event,detail={}){recorder.mark(event,performance.now(),detail)}
+function displayRecording(){
+ const n=recorder.samples.length,sec=recorder.startedMs===null?0:((recorder.stoppedMs??performance.now())-recorder.startedMs)/1000;
+ $('recordState').textContent=recorder.startedMs===null?'未記録（最大12,000サンプル）':(recorder.active?'● 記録中':'■ 記録停止')+' — '+n.toLocaleString()+' 点 / '+sec.toFixed(1)+'秒 / イベント '+recorder.events.length+'件'+(recorder.reason==='sample_limit'?'（上限で自動停止）':'');
+ $('recordStart').disabled=recorder.active;$('recordStop').disabled=!recorder.active;
+ $('csvExport').disabled=!n;$('jsonExport').disabled=!n;
+}
+$('recordStart').onclick=()=>{recorder.start(performance.now(),settings(),matcher.reference);displayRecording();log('内部データ記録を開始');};
+$('recordStop').onclick=()=>{recorder.stop(performance.now());displayRecording();log('内部データ記録を停止');};
+$('recordClear').onclick=()=>{recorder.reset();displayRecording();$('trialResult').textContent='記録を破棄しました。';log('内部データを破棄');};
+// CSV contains scalar data only. JSON additionally preserves calibration profiles and event metadata.
+const csvColumns=['t_ms','kind','phase','source','interval_ms','raw_a_x','raw_a_y','raw_a_z','gyro_x','gyro_y','gyro_z','native_a_x','native_a_y','native_a_z','predicted_a_x','predicted_a_y','predicted_a_z','linear_a_x','linear_a_y','linear_a_z','q_w','q_x','q_y','q_z','anchor_a_x','anchor_a_y','anchor_a_z','corrected_x','corrected_y','shift_x','shift_y','acc_match_error','gyro_match_error','matched','auto_corrected','stationary','delta_x','delta_y','velocity_x','velocity_y','pos_x','pos_y','dt_s','beta','gain','scale','dead','friction','mode','event','detail'];
+function csvSafe(v){if(v===undefined||v===null)return '';if(typeof v==='boolean')return v?'1':'0';const s=String(v);if(typeof v==='string'&&/^[=+@\t\r]/.test(s))return '"'+("'"+s).replace(/"/g,'""')+'"';return '"'+s.replace(/"/g,'""')+'"';}
+function downloadFile(content,name,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+function sessionName(ext){const date=new Date(recorder.startedWallMs||Date.now()).toISOString().replace(/[:.]/g,'-');return 'sensor-mouse-diagnostics-'+date+'.'+ext}
+$('csvExport').onclick=()=>{const rows=[...recorder.samples.map(s=>({kind:'sample',...s})),...recorder.events.map(e=>({kind:'event',...e,detail:JSON.stringify(e)}))].sort((a,b)=>a.t_ms-b.t_ms);
+ const csv='\uFEFF'+[csvColumns.join(','),...rows.map(row=>csvColumns.map(k=>csvSafe(row[k])).join(','))].join('\r\n');downloadFile(csv,sessionName('csv'),'text/csv;charset=utf-8');};
+$('jsonExport').onclick=()=>downloadFile(JSON.stringify(recorder.snapshot(),null,2),sessionName('json'),'application/json;charset=utf-8');
+let trial=null;
+function markTrial(name){const t=performance.now(),pos=state.pos.slice();traceEvent(name,{position_m:pos.slice()});
+ if(name==='motion_start'){trial={time:t,position:pos};$('trialResult').textContent='移動開始をマークしました。';}
+ if(name==='motion_turn')$('trialResult').textContent='折り返し位置を記録しました。';
+ if(name==='motion_end'){
+  if(!trial){$('trialResult').textContent='先に移動開始をマークしてください。';return;}
+  const dx=(pos[0]-trial.position[0])*100,dy=(pos[1]-trial.position[1])*100;
+  const xText=$('actualX').value.trim(),yText=$('actualY').value.trim();const hasActual=xText!==''&&yText!==''&&Number.isFinite(+xText)&&Number.isFinite(+yText);
+  const error=hasActual?Math.hypot(dx-(+xText),dy-(+yText)):null;
+  $('trialResult').textContent='推定変位: X '+dx.toFixed(2)+' cm, Y '+dy.toFixed(2)+' cm / '+((t-trial.time)/1000).toFixed(2)+'秒'+(hasActual?' ｜実測との差: '+error.toFixed(2)+' cm':'（実測X/Yを入力すると誤差を計算）');
+  traceEvent('trial_result',{estimated_dx_cm:dx,estimated_dy_cm:dy,actual_dx_cm:hasActual?+xText:null,actual_dy_cm:hasActual?+yText:null,error_cm:error});trial=null;
+ }
+}
+$('trialStart').onclick=()=>markTrial('motion_start');$('trialTurn').onclick=()=>markTrial('motion_turn');$('trialEnd').onclick=()=>markTrial('motion_end');
+displayRecording();
+
+function reorigin(){traceEvent('origin_reset');motion.reset();state.pos=[0,0];state.cam=[0,0];state.trail=[];status('座標を原点に戻しました。初期補正の姿勢基準は維持します。')}
 function fullReset(){fusion.reset();motion.reset();matcher.reset();state.anchor=null;state.cal=null;state.pos=[0,0];state.cam=[0,0];state.trail=[];state.shift=[0,0];state.latestRaw=null;state.latestGyro=null;state.lastEvent=null;state.accXY=[0,0];$('calStatus').textContent='初回補正が必要です。';$('autoLabel').textContent='自動補正：未設定';}
-function startCalibration(){if(!state.active){status('まずセンサーを開始してください。',true);return}state.cal={start:performance.now(),a:[],g:[]};state.anchor=null;motion.resetVelocity();status('初回補正中：端末を約1.3秒、静止させてください。');}
+function startCalibration(){if(!state.active){status('まずセンサーを開始してください。',true);return}traceEvent('calibration_start');state.cal={start:performance.now(),a:[],g:[]};state.anchor=null;motion.resetVelocity();status('初回補正中：端末を約1.3秒、静止させてください。');}
 function finishCalibration(){const cal=state.cal;if(!cal)return;
- if(cal.a.length<12||cal.g.length<12){status('補正失敗：未加工データのサンプルが不足しています。',true);state.cal=null;return}
+ if(cal.a.length<12||cal.g.length<12){status('補正失敗：未加工データのサンプルが不足しています。',true);state.cal=null;traceEvent('calibration_failed',{reason:'insufficient_samples'});return}
  const ref=matcher.setReference(cal.a,cal.g);const gm=Vec3.norm(ref.acc);
- if(ref.accNoise>.4||ref.gyroNoise>.12||Vec3.norm(ref.gyro)>.35||Math.abs(gm-9.80665)>1.4){status('補正失敗：静止状態が安定しないか重力値が不適切です。やり直してください。',true);matcher.reset();state.cal=null;return}
- fusion.anchor(ref.acc,ref.gyro);fusion.filter.beta=+$('beta').value/100;state.anchor=fusion.filter.q.slice();state.shift=[0,0];motion.resetVelocity();state.cal=null;state.fixCount=0;
+ if(ref.accNoise>.4||ref.gyroNoise>.12||Vec3.norm(ref.gyro)>.35||Math.abs(gm-9.80665)>1.4){status('補正失敗：静止状態が安定しないか重力値が不適切です。やり直してください。',true);matcher.reset();state.cal=null;traceEvent('calibration_failed',{reason:'unstable_samples'});return}
+ fusion.anchor(ref.acc,ref.gyro);fusion.filter.beta=+$('beta').value/100;state.anchor=fusion.filter.q.slice();state.shift=[0,0];motion.resetVelocity();state.cal=null;state.fixCount=0;recorder.setCalibration(ref);traceEvent('calibration_complete',{sample_count:ref.sampleCount,acc_noise:ref.accNoise,gyro_noise:ref.gyroNoise});
  const msg='補正完了：'+ref.sampleCount+'点、加速度雑音 '+ref.accNoise.toFixed(3)+'m/s²、角速度雑音 '+ref.gyroNoise.toFixed(4)+'rad/s。';$('calStatus').textContent=msg;status('初期平面を固定しました。加工前の静止パターンと一致すると自動補正します。');log(msg);
 }
 function processInput(t,raw,gyro,nativeLinear=null){
@@ -226,6 +294,7 @@ function processInput(t,raw,gyro,nativeLinear=null){
  if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}
  $('autoLabel').textContent=cfg.auto?(match.matched?'自動補正：静止一致 ('+state.fixCount+')':'自動補正：監視中'):'自動補正：OFF';
  state.input=(nativeLinear&&cfg.native)?'OS重力補正 + IMU回転':'Madgwick重力補正 + IMU回転';
+ return {result,vector,current,match,out,cfg};
 }
 function onMotion(e){if(!state.active)return;const t=performance.now();
  const a=e.accelerationIncludingGravity,rot=e.rotationRate,lin=e.acceleration;
@@ -234,7 +303,23 @@ function onMotion(e){if(!state.active)return;const t=performance.now();
  const gyro=rot&&[rot.beta,rot.gamma,rot.alpha].every(Number.isFinite)?[rot.beta,rot.gamma,rot.alpha].map(v=>v*Math.PI/180):null;
  const native=lin&&[lin.x,lin.y,lin.z].every(Number.isFinite)?[lin.x,lin.y,lin.z]:null;
  state.latestRaw=raw;state.latestGyro=gyro;
- processInput(t,raw,gyro,native);
+ const phase=state.cal?'calibrating':state.anchor?'operating':'before_calibration';
+ const diag=processInput(t,raw,gyro,native);
+ if(recorder.active){
+  const res=diag?.result,cfg=diag?.cfg,match=diag?.match;
+  const row={phase,source:diag?(native&&cfg.native?'native_linear':'madgwick_linear'):'unprocessed',interval_ms:Number.isFinite(e.interval)?e.interval:null,
+   ...numbers('raw_a',raw),...numbers('gyro',gyro),...numbers('native_a',native),
+   ...numbers('predicted_a',res?.predicted),...numbers('linear_a',res?.linear),...numbers('anchor_a',diag?.vector),
+   q_w:res?.q[0],q_x:res?.q[1],q_y:res?.q[2],q_z:res?.q[3],
+   corrected_x:diag?.current[0],corrected_y:diag?.current[1],
+   shift_x:state.shift[0],shift_y:state.shift[1],
+   acc_match_error:match?.accErr,gyro_match_error:match?.gyroErr,matched:match?.matched??false,auto_corrected:match?.correction??false,
+   stationary:diag?.out.stationary,delta_x:diag?.out.delta[0],delta_y:diag?.out.delta[1],velocity_x:motion.v[0],velocity_y:motion.v[1],
+   pos_x:state.pos[0],pos_y:state.pos[1],dt_s:res?.dt,beta:fusion.filter.beta,
+   gain:cfg?.gain,scale:cfg?.scale,dead:cfg?.dead,friction:cfg?.friction,mode:cfg?.mode};
+  recorder.append(t,row);
+ }
+
 }
 async function start(){if(!window.isSecureContext){status('HTTPSかlocalhostが必要です。',true);return}if(typeof DeviceMotionEvent==='undefined'){status('端末ブラウザがDeviceMotionEventに未対応です。',true);return}
  try{if(typeof DeviceMotionEvent.requestPermission==='function'){const p=await DeviceMotionEvent.requestPermission();if(p!=='granted')throw Error('センサー権限が拒否されました')}
@@ -242,16 +327,16 @@ async function start(){if(!window.isSecureContext){status('HTTPSかlocalhostが�
  catch(e){status('開始できません：'+e.message,true)}}
 function stop(){state.active=false;window.removeEventListener('devicemotion',onMotion);state.cal=null;motion.resetVelocity();status('センサー停止中。模擬入力は可能です。')}
 $('start').onclick=start;$('stop').onclick=stop;$('calibrate').onclick=startCalibration;$('center').onclick=()=>{state.cam=state.pos.slice()};$('origin').onclick=reorigin;
-$('resetFilter').onclick=()=>{fullReset();status('姿勢推定を初期化しました。再度、初回補正してください。')};
+$('resetFilter').onclick=()=>{traceEvent('filter_reset');fullReset();status('姿勢推定を初期化しました。再度、初回補正してください。')};
 $('clearTrail').onclick=()=>{state.trail=[];log('軌跡を消去しました。')};
 $('defaults').onclick=()=>{for(const k in defaults){if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k];$(k).dispatchEvent(new Event('input'))}motion.resetVelocity();status('設定を初期化しました。')};
 const dirs=new Map();for(const b of document.querySelectorAll('[data-dir]')){const name=b.dataset.dir;const st=e=>{e.preventDefault();dirs.set(name,true);try{b.setPointerCapture(e.pointerId)}catch{}};const end=()=>dirs.delete(name);b.addEventListener('pointerdown',st);for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,end)}
 const view=$('viewport');view.addEventListener('pointerdown',e=>{state.touch={x:e.clientX,y:e.clientY};view.setPointerCapture(e.pointerId)});view.addEventListener('pointermove',e=>{if(!state.touch)return;const cfg=settings();state.cam[0]-=(e.clientX-state.touch.x)/cfg.scale;state.cam[1]-=(e.clientY-state.touch.y)/cfg.scale;state.touch={x:e.clientX,y:e.clientY}});for(const ev of ['pointerup','pointercancel','lostpointercapture'])view.addEventListener(ev,()=>state.touch=null);
-$('testPulse').onclick=()=>{state.autoTest={start:performance.now()};log('往復模擬入力：正方向加速→負方向減速で計算。')};
+$('testPulse').onclick=()=>{traceEvent('simulated_round_trip');state.autoTest={start:performance.now()};log('往復模擬入力：正方向加速→負方向減速で計算。')};
 function sampleSim(now,dt){let x=(dirs.has('right')?1:0)-(dirs.has('left')?1:0),y=(dirs.has('down')?1:0)-(dirs.has('up')?1:0);
  let g=0;if(state.autoTest){const sec=(now-state.autoTest.start)/1000;if(sec>=2.0)state.autoTest=null;else g=sec<1?1:-1}
  x=x*1.5+g*1.2;y=y*1.5;
- if(x||y){const cfg=settings(),current=[x,y];const o=motion.update(now,current,cfg,false);state.pos=motion.x.slice();state.accXY=current;state.history.push(current);if(state.history.length>160)state.history.shift();if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}state.input='模擬加速度';}
+ if(x||y){const cfg=settings(),current=[x,y];const o=motion.update(now,current,cfg,false);state.pos=motion.x.slice();state.accXY=current;state.history.push(current);if(state.history.length>160)state.history.shift();if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}state.input='模擬加速度';if(recorder.active)recorder.append(now,{phase:'simulated',source:'simulated',corrected_x:x,corrected_y:y,delta_x:o.delta[0],delta_y:o.delta[1],pos_x:state.pos[0],pos_y:state.pos[1],velocity_x:motion.v[0],velocity_y:motion.v[1],mode:cfg.mode,gain:cfg.gain,scale:cfg.scale});}
  else if(!state.active&&motion.last!==null){motion.update(now,[0,0],settings(),false);state.pos=motion.x.slice()}
 }
 function canvasReady(cv,c){const rect=cv.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2.5);const w=Math.max(1,rect.width),h=Math.max(1,rect.height);const pw=Math.round(w*dpr),ph=Math.round(h*dpr);if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph}c.setTransform(dpr,0,0,dpr,0,0);return {w,h};}
@@ -274,13 +359,13 @@ function drawPlane(){const {w,h}=canvasReady(C,ctx);ctx.fillStyle='#081727';ctx.
 function drawGraph(){const {w,h}=canvasReady(G,gc);gc.clearRect(0,0,w,h);gc.strokeStyle='#415371';gc.beginPath();gc.moveTo(0,h/2);gc.lineTo(w,h/2);gc.stroke();for(const [idx,col] of [[0,'#73ead5'],[1,'#f5b477']]){gc.strokeStyle=col;gc.lineWidth=1.7;gc.beginPath();state.history.forEach((p,i)=>{const x=i/159*w,y=Math.min(h-2,Math.max(2,h/2-p[idx]*23));if(i===0)gc.moveTo(x,y);else gc.lineTo(x,y)});gc.stroke()}}
 let frameTime=performance.now(),frameCount=0;function frame(now){const dt=Math.min(.05,Math.max(.001,(now-frameTime)/1000));frameTime=now;
  if(dirs.size||state.autoTest)sampleSim(now,dt);
- drawPlane();if((frameCount++%3)===0)drawGraph();
+ drawPlane();if((frameCount++%3)===0)drawGraph();if(frameCount%35===0)displayRecording();
  $('coordX').textContent=(state.pos[0]*100).toFixed(1);$('coordY').textContent=(state.pos[1]*100).toFixed(1);
  $('speed').textContent=settings().mode==='INTEGRATED'?(Math.hypot(...motion.v)*100).toFixed(1):'—';
  $('displayPx').textContent=(Math.hypot(...state.pos)*settings().scale).toFixed(0);
  $('ax').textContent=state.accXY[0].toFixed(2);$('ay').textContent=state.accXY[1].toFixed(2);$('inputLabel').textContent='入力：'+state.input;
  requestAnimationFrame(frame)}requestAnimationFrame(frame);
- document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){if(recorder.active){recorder.stop(performance.now(),'page_hidden');displayRecording()}stop()}});
 })();
 </script>
 </body>
