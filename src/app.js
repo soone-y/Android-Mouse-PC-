@@ -10,7 +10,14 @@ const comparison=new GravityComparison();
 const comparisonUI=createComparisonUI(comparison);
 const $=id=>document.getElementById(id),engine=new MotionPipeline(),recorder=new Recorder(),plot=new Plotter($('plane'));
 const history=new MotionHistory(),accChart=new TimeChart($('accGraph'),{title:'平面加速度',unit:'m/s²',key:'acc'}),velChart=new TimeChart($('velocityGraph'),{title:'推定速度',unit:'cm/s',key:'velocity'});
-const tracks=['native_free','native_constrained','estimated_free','estimated_constrained'];
+const tracks=['fixed_free','fixed_constrained','native_free','native_constrained','estimated_free','estimated_constrained'];
+// Add fixed gravity choices to the existing selector.
+for(const key of ['fixed_free','fixed_constrained']){
+ if(![...$('track').options].some(o=>o.value===key)){
+  const opt=document.createElement('option');opt.value=key;
+  opt.textContent=key==='fixed_free'?'固定重力・補正なし':'固定重力・静止補正';$('track').append(opt);
+ }
+}
 const settings=()=>({zupt:$('zupt').checked,matchThreshold:Number($('threshold').value)/100,scale:Number($('scale').value),flipY:$('flipY').checked,track:$('track').value});
 let sensorActive=false,loadedRows=null,replayed=null,lastOutput=null,currentSource='live',trial=null,simulated=null,lastRecordUi=0;
 let paths=Object.fromEntries(tracks.map(key=>[key,[]]));const now=()=>performance.now();
@@ -19,7 +26,7 @@ function recordingStatus(){const n=recorder.samples.length;$('recordInfo').textC
 function clearPaths(){history.clear();paths=Object.fromEntries(tracks.map(key=>[key,[]]));plot.center([0,0]);lastOutput=null}
 function displayTracks(){if(currentSource==='replay'&&replayed)return {main:replayed.paths.event,comparison:[replayed.paths.nominal,replayed.paths.constrained]};const selected=settings().track;const [src,mode]=selected.split('_');const available=paths[selected].length>0?selected:('estimated_'+mode);return {main:paths[available]||[],comparison:paths[(available.startsWith('native')?'estimated':'native')+'_'+mode]||[]}}
 function addOutput(f){if(!f||f.phase!=='operating')return;lastOutput=f;history.append(liveGraphFrame(f));
- for(const src of ['native','estimated'])for(const mode of ['free','constrained']){const p=f.tracks[src][mode],key=src+'_'+mode;if(src==='native'&&!f.anchoredNative)continue;let path=paths[key];if(!path.length||Math.hypot(p.x[0]-path.at(-1)[0],p.x[1]-path.at(-1)[1])>.00007){path.push(p.x.slice());if(path.length>1200)path.shift()}}
+ for(const src of ['fixed','native','estimated'])for(const mode of ['free','constrained']){const p=f.tracks[src][mode],key=src+'_'+mode;if(src==='native'&&!f.anchoredNative)continue;let path=paths[key];if(!path.length||Math.hypot(p.x[0]-path.at(-1)[0],p.x[1]-path.at(-1)[1])>.00007){path.push(p.x.slice());if(path.length>1200)path.shift()}}
 }
 let lastGraphRendered=0;
 function drawGraphs(){comparisonUI.draw();
@@ -38,7 +45,7 @@ let lastRendered=0;function updateFrame(t=now()){if(t-lastRendered<32){requestAn
  let pos=[0,0],vel=[0,0],free=[0,0],acc=[0,0],evidence='—';
  if(currentSource==='replay'&&replayed){pos=replayed.event.position;vel=replayed.event.velocity;free=vel;evidence=`記録済み ${replayed.applied}点`}
  else if(currentSource==='simulation'&&simulated){const selected=settings().track.split('_')[1];const p=simulated[selected]||simulated.free;pos=p.x;vel=p.v;free=simulated.free.v;evidence='模擬入力'}
- else if(lastOutput){const [src,mode]=settings().track.split('_');const actualSrc=src==='native'&&!lastOutput.anchoredNative?'estimated':src;const choice=lastOutput.tracks[actualSrc];pos=choice[mode].x;vel=choice[mode].v;free=choice.free.v;acc=(actualSrc==='native'?lastOutput.anchoredNative:lastOutput.anchoredEstimated)?.slice(0,2)||[0,0];evidence=lastOutput.stationaryEvidence?'一致':'不一致'}
+ else if(lastOutput){const [src,mode]=settings().track.split('_');const actualSrc=src==='native'&&!lastOutput.anchoredNative?'estimated':src;const choice=lastOutput.tracks[actualSrc];pos=choice[mode].x;vel=choice[mode].v;free=choice.free.v;acc=(actualSrc==='native'?lastOutput.anchoredNative:actualSrc==='fixed'?lastOutput.anchoredFixed:lastOutput.anchoredEstimated)?.slice(0,2)||[0,0];evidence=lastOutput.stationaryEvidence?'一致':'不一致'}
  $('x').textContent=(pos[0]*100).toFixed(2);$('y').textContent=(pos[1]*100).toFixed(2);$('speed').textContent=(Math.hypot(...vel)*100).toFixed(2);$('freeSpeed').textContent=(Math.hypot(...free)*100).toFixed(2);$('acceleration').textContent=acc.map(v=>v.toFixed(2)).join(', ');$('evidence').textContent=evidence;
  requestAnimationFrame(updateFrame)}
 requestAnimationFrame(updateFrame);
@@ -75,7 +82,7 @@ function reprocess(){if(!loadedRows)return;try{replayed=replayRows(loadedRows,{s
 $('replay').onclick=reprocess;$('replaySource').onchange=()=>{if(loadedRows)reprocess()};
 function simulation(roundTrip){stopSensor();engine.reset();clearPaths();replayed=null;currentSource='simulation';const a=new TrackPair();const t0=now(),duration=roundTrip?2:1;for(let step=0;step<=duration/.01;step++){
  const t=step*.01;const acc=2*Math.sin(2*Math.PI*t)*(roundTrip&&t>=1?-1:1);
- a.update(t0+t*1000,[acc,0],false);history.append({t:t0+t*1000,acc:{native:[acc,0],estimated:[acc,0]},velocities:{native_free:a.free.v.slice(),native_constrained:a.constrained.v.slice(),estimated_free:a.free.v.slice(),estimated_constrained:a.constrained.v.slice()}});const f=a.free.x.slice(),c=a.constrained.x.slice();paths.native_free.push(f);paths.native_constrained.push(c);paths.estimated_free.push(f);paths.estimated_constrained.push(c);
+ a.update(t0+t*1000,[acc,0],false);history.append({t:t0+t*1000,acc:{fixed:[acc,0],native:[acc,0],estimated:[acc,0]},velocities:{native_free:a.free.v.slice(),native_constrained:a.constrained.v.slice(),estimated_free:a.free.v.slice(),estimated_constrained:a.constrained.v.slice(),fixed_free:a.free.v.slice(),fixed_constrained:a.constrained.v.slice()}});const f=a.free.x.slice(),c=a.constrained.x.slice();paths.native_free.push(f);paths.native_constrained.push(c);paths.estimated_free.push(f);paths.estimated_constrained.push(c);paths.fixed_free.push(f);paths.fixed_constrained.push(c);
  }
  simulated={free:a.free,constrained:a.constrained};plot.center([0,0]);status(`模擬${roundTrip?'往復':'前進・停止'}完了：理論上の最終速度 0 m/s${roundTrip?'、最終位置 0 m':'、正の位置に停止'}。`);recorder.mark(now(),'simulated',{roundTrip});}
 $('simulate').onclick=()=>simulation(false);$('simulateRound').onclick=()=>simulation(true);

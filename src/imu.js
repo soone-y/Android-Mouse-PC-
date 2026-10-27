@@ -17,10 +17,17 @@ export class OrientationEstimator {
   const dt=(s.t-this.last)/1000; this.last=s.t;
   if(!(dt>0)||dt>.1) return {q:this.q.slice(),dt,gap:true,gated:true};
   const rate=V.sub(s.gyro,this.bias);
-  this.q=Q.integrate(this.q,rate,dt);
+  // Confirmed rest gives a zero-angular-velocity observation.
+  const resting=s.stationary===true && Math.abs(V.norm(s.raw)-G)<.8 && V.norm(rate)<.10;
+  if(resting){
+   const weight=Math.min(0.02,dt*0.4);
+   this.bias=this.bias.map((b,i)=>b+(s.gyro[i]-b)*weight);
+  }else{
+   this.q=Q.integrate(this.q,rate,dt);
+  }
   // The detector must have observed a stable interval resembling calibration.
   // Do NOT correct attitude from acceleration while a push or slide is underway.
-  const quiet=s.stationary===true && V.norm(rate)<.10 && Math.abs(V.norm(s.raw)-G)<.8;
+  const quiet=resting;
   if(quiet){
    const norm=V.norm(s.raw);
    const expected=Q.rotate(Q.conj(this.q),[0,0,1]);

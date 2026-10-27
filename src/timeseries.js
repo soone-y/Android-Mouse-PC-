@@ -15,10 +15,10 @@ export class MotionHistory {
 const finite2=a=>Array.isArray(a)&&a.length>=2&&a.slice(0,2).every(Number.isFinite);
 export function liveGraphFrame(frame){
  if(frame?.phase!=='operating')return null;
- const velocities={};for(const src of ['native','estimated'])for(const mode of ['free','constrained']){
+ const velocities={};for(const src of ['fixed','native','estimated'])for(const mode of ['free','constrained']){
   velocities[src+'_'+mode]=src==='native'&&!finite2(frame.anchoredNative)?null:frame.tracks[src][mode].v.slice();
  }
- return {t:frame.t,acc:{native:finite2(frame.anchoredNative)?frame.anchoredNative.slice(0,2):null,estimated:frame.anchoredEstimated.slice(0,2)},velocities};
+ return {t:frame.t,acc:{fixed:frame.anchoredFixed.slice(0,2),native:finite2(frame.anchoredNative)?frame.anchoredNative.slice(0,2):null,estimated:frame.anchoredEstimated.slice(0,2)},velocities};
 }
 export function graphSeries(history,{track='native_constrained',axis='both',windowSeconds=15,context='live',replayTrack='event',overlayFree=true}={}){
  const all=history?.rows||[];if(!all.length)return {times:[],acc:[],velocity:[],comparison:[],first:0,end:0,missing:false};

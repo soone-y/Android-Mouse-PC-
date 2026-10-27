@@ -12,10 +12,10 @@ export class MotionPipeline {
  reset(){
   this.orientation=new OrientationEstimator();this.detector=new StationaryDetector();
   this.tracks={fixed:new TrackPair(),native:new TrackPair(),estimated:new TrackPair()};
-  this.anchor=null;this.calibration=null;this.latest=null;this.lastFrame=null;
+  this.anchor=null;this.referenceGravity=null;this.calibration=null;this.latest=null;this.lastFrame=null;
  }
  beginCalibration(t){
-  this.calibration={start:t,samples:[]};this.anchor=null;this.latest=null;
+  this.calibration={start:t,samples:[]};this.anchor=null;this.referenceGravity=null;this.latest=null;
   for(const track of Object.values(this.tracks))track.reset();
  }
  consume(s,{zupt=true,matchThreshold=.35}={}){
