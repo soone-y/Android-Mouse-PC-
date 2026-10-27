@@ -1,129 +1,287 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111a2b"><title>Sensor Mouse Lab — IMU v2</title>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1424">
+<title>Sensor Mouse Lab v4 — Fixed Plane & Distance</title>
 <style>
-:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#0e1728;color:#eef4ff}*{box-sizing:border-box}body{max-width:980px;margin:auto;padding:16px}h1{margin:.3em 0;font-size:1.65em}h2{font-size:1.05em;margin:0 0 12px}p{line-height:1.55;color:#b9c8da}.panel{border:1px solid #34445a;background:#172439;border-radius:14px;padding:15px;margin:12px 0}.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}button,select{padding:10px 12px;border:1px solid #526985;background:#2a415d;color:inherit;border-radius:8px;font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8ee5e2}button.primary{background:#136e71}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:9px 0}.setting{display:grid;gap:5px;margin:13px 0}.setting>span{display:flex;justify-content:space-between}input[type=range]{width:100%;accent-color:#73e6d7}label{color:#e6edf7}#field{touch-action:none;position:relative;overflow:hidden;height:315px;border:1px solid #58718e;border-radius:10px;background:radial-gradient(ellipse,#233b56,#101b2d)}#field:before{content:"";position:absolute;inset:0;background-image:linear-gradient(#ffffff10 1px,transparent 1px),linear-gradient(90deg,#ffffff10 1px,transparent 1px);background-size:25px 25px}#cursor{position:absolute;left:50%;top:50%;width:17px;height:17px;border:2px solid white;border-radius:50%;background:#69e6cf;box-shadow:0 0 0 5px #69e6cf40;transform:translate(-50%,-50%);pointer-events:none}#target{position:absolute;left:78%;top:30%;border:2px dashed #ffc587;width:43px;height:43px;border-radius:50%;transform:translate(-50%,-50%)}#graph{width:100%;height:145px;border-radius:9px;background:#101d31}.small{font-size:.85em;color:#afc3db}#status{color:#a2e9d6;min-height:35px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.metrics>div{padding:8px;background:#101c2e;border-radius:8px;text-align:center}.metrics b{display:block;font-variant-numeric:tabular-nums}.metrics small{font-size:.76em;color:#a1b5cc}.warn{border-left:3px solid #e7b774;padding:10px;background:#282b36}footer{color:#9eb2cd;font-size:.8em;margin:20px 0}@media(max-width:720px){.grid{display:block}#field{height:260px}body{padding:11px}}
-</style></head>
-<body><header><h1>Sensor Mouse Lab <span class="small">IMU v2</span></h1><p>Madgwick姿勢推定 → 重力除去 → カーソル移動量変換。Android向け参照実装と同じアルゴリズム設計をJavaScriptに移植した実験デモです。</p></header>
-<div class="grid"><main><section class="panel"><h2>操作テスト（ブラウザ内のみ）</h2><div id="field"><div id="target"></div><div id="cursor"></div></div><div class="row"><button id="start" class="primary">センサー開始</button><button id="stop">停止</button><button id="zero">初期補正（平面固定）</button><button id="center">中央へ</button></div><div id="status" role="status">待機中。HTTPSのスマートフォンでセンサーを開始してください。</div><div class="metrics"><div><b id="ax">0.00</b><small>補正加速度 X</small></div><div><b id="ay">0.00</b><small>補正加速度 Y</small></div><div><b id="rate">0</b><small>更新回数 / 秒</small></div></div><canvas id="graph"></canvas><p class="small">水色：補正加速度X、橙色：Y（m/s²）。描画とセンサーイベントは別周期です。</p></section><section class="panel"><h2>模擬入力・診断</h2><div class="row"><button data-dir="left">←</button><button data-dir="up">↑</button><button data-dir="down">↓</button><button data-dir="right">→</button><button id="selftest">自己テスト</button></div><p id="anchorStatus" class="small">初回補正で基準平面を固定します。旧処理の重複実行は修正済みです。開始後、静止させて校正してください。</p><p id="diagnostics" class="small">矢印は押している間だけ模擬加速度を入力します。画面内を指でドラッグして動作も確認できます。</p></section></main>
-<aside><section class="panel"><h2>移動量の設定</h2><label class="setting">操作方式<select id="mode"><option value="DIRECT">直接変換（安定重視）</option><option value="INTEGRATED">速度積分（実験）</option></select></label>
-<label class="setting"><span>感度 <output id="gainV"></output></span><input id="gain" type="range" min="10" max="400" value="80" step="5"></label>
-<label class="setting"><span>閾値（m/s²） <output id="deadV"></output></span><input id="dead" type="range" min="0" max="100" value="12"></label>
-<label class="setting"><span>平滑化（Hz） <output id="smoothV"></output></span><input id="smooth" type="range" min="0" max="30" value="12"></label>
-<label class="setting"><span>摩擦／減衰（1/s） <output id="frictionV"></output></span><input id="friction" type="range" min="0" max="30" value="8"></label>
-<label class="setting"><span>静止閾値（m/s²） <output id="stationaryV"></output></span><input id="stationary" type="range" min="0" max="50" value="8"></label>
-<label class="setting"><span>静止判定の保持時間（秒） <output id="holdV"></output></span><input id="hold" type="range" min="0" max="100" value="15"></label>
-<label><input id="invertX" type="checkbox"> 左右反転</label><p><label><input id="invertY" type="checkbox" checked> 上下反転</label></p>
-<p><label><input id="pauseTouch" type="checkbox" checked> 操作エリアに触れている間はセンサー移動を停止</label></p>
-<div class="row"><button id="defaults">初期値へ</button><button id="resetFilter">フィルター初期化</button></div><p class="small">値はブラウザにのみ保存します。積分方式のカーソル移動は実世界の位置測定ではありません。</p></section>
-<section class="panel"><h2>姿勢推定</h2><label class="setting"><span>Madgwick β <output id="betaV"></output></span><input id="beta" type="range" min="0" max="100" value="10"></label>
-<div class="row"><label><input id="fusion" type="checkbox" checked> 姿勢推定による重力補正（空間固定平面には必須）</label></div><p class="small">OFFではブラウザが返す重力除去済み加速度（利用可能な場合）を使用します。姿勢の変化・並進加速度の大きさによって姿勢推定には誤差が出ます。</p></section></aside></div>
-<section class="panel"><h2>方式と制限</h2><p class="warn">このデモはOSのマウスポインターやBluetoothを操作しません。ブラウザのDeviceMotionEventはAndroidのSensorEventとは時刻・座標軸・供給されるセンサー値が異なり、同じ機種でも数値結果が完全一致する保証はありません。角速度または重力込み加速度を提供しないブラウザでは、姿勢推定を利用できません。</p><p>外部API、トラッキング、センサーデータの送信はありません。センサー値はメモリ内で処理し、保存するのは設定値だけです。GitHub PagesのHTTPS上で使ってください。</p></section>
-<footer>zlib License · <a href="https://github.com/soone-y/Android-Mouse-PC-">GitHub repository</a></footer>
+:root{color-scheme:dark;font:15px/1.55 system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#0b1424;color:#e9f0fc}
+*{box-sizing:border-box}body{max-width:1060px;margin:auto;padding:14px}h1{font-size:1.6rem;margin:.2rem 0}h2{font-size:1.06rem;margin:0 0 12px}p{margin:8px 0;color:#adbed5}small,.sub{color:#98b2cf}.pill{display:inline-block;border:1px solid #54748c;border-radius:18px;padding:3px 8px;font-size:.75rem;color:#8be6d3}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13px;margin-top:13px}.panel{border:1px solid #33455d;border-radius:14px;background:#172438;padding:16px;margin-bottom:13px;min-width:0}.panel p{font-size:.83rem}.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.row.space{justify-content:space-between}button,select{background:#25405f;border:1px solid #56718c;border-radius:9px;color:#f4f7fe;padding:9px 12px;font:inherit;cursor:pointer}button.primary{background:#138875;border-color:#5acabb}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #6bdbda;outline-offset:2px}button:disabled{opacity:.5;cursor:not-allowed}
+#viewport{position:relative;width:100%;height:380px;border:1px solid #53728d;border-radius:11px;overflow:hidden;background:#09182b;touch-action:none;user-select:none}#plane{display:block;width:100%;height:100%}#viewportLabel{position:absolute;bottom:8px;left:8px;background:#101e33d9;padding:4px 8px;border-radius:6px;color:#b6cae0;font-size:.72rem;pointer-events:none}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}.metric{border-radius:8px;background:#0c1b2d;text-align:center;padding:8px 4px;min-width:0}.metric strong{font-variant-numeric:tabular-nums;font-size:1.1rem;display:block;color:#78e4d3}.metric span{font-size:.7rem;color:#96afc9}.stat{border-left:3px solid #57cfc4;padding:8px 10px;background:#1b3246;border-radius:4px;font-size:.8rem;color:#d4e8ed;min-height:36px}.stat.warning{border-color:#ecaf67}.setting{padding:9px 0;border-bottom:1px solid #344559}.setting label{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:.86rem}.setting output{font-variant-numeric:tabular-nums;color:#83eadb}.setting input[type=range]{width:100%;accent-color:#66ded0}.check{display:flex;gap:7px;align-items:center;margin:8px 0;font-size:.87rem}.check input{accent-color:#64d9c6}#graph{display:block;background:#0b192b;width:100%;height:125px;border-radius:9px}#log{max-height:110px;overflow:auto;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;color:#bbcfdf;background:#101c2d;border-radius:8px;padding:8px}.help{font-size:.78rem;color:#9cb3ce}footer{font-size:.8rem;color:#94afc5;margin:18px 0 26px}a{color:#8eece0}select{max-width:100%}@media(max-width:760px){main{display:block}#viewport{height:340px}body{padding:10px}.panel{padding:12px}.metric strong{font-size:1rem}}
+</style>
+</head>
+<body>
+<header>
+<span class="pill">IMU v4 · アンカー座標系 / 二重積分 / 自動静止補正</span>
+<h1>Sensor Mouse Lab</h1>
+<p>初回補正時の端末XY平面を基準に固定し、移動量を拡大表示します。ブラウザ内の検証専用で、PCのマウスやBluetoothには接続しません。</p>
+</header>
+<main>
+<div>
+<section class="panel">
+<h2>操作平面 <span class="pill">広域座標・ドットグリッド</span></h2>
+<div class="row"><button class="primary" id="start">センサー開始</button><button id="calibrate">初回補正（基準設定）</button><button id="stop">停止</button><button id="center">表示を追従</button><button id="origin">座標を原点に戻す</button></div>
+<div class="stat" id="status" role="status" aria-live="polite" style="margin:10px 0">センサー開始後、端末を静止させて初回補正をしてください。</div>
+<div id="viewport"><canvas id="plane" aria-label="原点とカーソル軌跡、点グリッド付き仮想座標平面"></canvas><div id="viewportLabel">1cm単位の補助点 / 10cmの主点（表示倍率により間引き）</div></div>
+<div class="metrics">
+<div class="metric"><strong id="coordX">0.0</strong><span>推定X (cm)</span></div>
+<div class="metric"><strong id="coordY">0.0</strong><span>推定Y (cm)</span></div>
+<div class="metric"><strong id="speed">0.0</strong><span>推定速度 (cm/s)</span></div>
+<div class="metric"><strong id="displayPx">0</strong><span>原点からの表示距離 (px)</span></div>
+<div class="metric"><strong id="ax">0.00</strong><span>補正加速度X</span></div>
+<div class="metric"><strong id="ay">0.00</strong><span>補正加速度Y</span></div>
+</div>
+<div class="row"><button data-dir="left">← 模擬</button><button data-dir="up">↑</button><button data-dir="down">↓</button><button data-dir="right">→</button><button id="testPulse">往復移動テスト</button><button id="clearTrail">軌跡消去</button></div>
+<p class="help">模擬ボタンは押している間、一定の加速度を加えます。「往復移動テスト」は正負対称の加速度から、移動と停止を再現します。表示は常に広域座標から計算し、画面外へ移動しても座標は失われません。</p>
+</section>
+<section class="panel">
+<h2>補正データと動作状態</h2>
+<div class="stat" id="calStatus">補正用の加工前センサーデータはまだありません。</div>
+<div class="row" style="margin-top:9px"><span class="pill" id="autoLabel">自動補正：未設定</span><span class="pill" id="inputLabel">入力：待機中</span></div>
+<canvas id="graph" aria-label="平面加速度の履歴グラフ"></canvas>
+<p class="help">水色X／橙Y：初期座標系へ回転させた重力除去後の加速度（m/s²）。自動補正の判定にはこの加工後データではなく、初回補正時に記録した加工前の加速度・角速度を利用します。</p>
+<pre id="log"></pre>
+</section>
+</div>
+<div>
+<section class="panel">
+<h2>操作・表示設定</h2>
+<label for="mode">移動モデル</label>
+<select id="mode"><option value="INTEGRATED">速度→距離の二重積分（実験）</option><option value="DIRECT">加速度→カーソル速度（比較用）</option></select>
+<div class="setting"><label for="scale">表示倍率 <output id="scaleV"></output></label><input id="scale" type="range" min="200" max="8000" step="100" value="2500"></div>
+<div class="setting"><label for="gain">操作感度 <output id="gainV"></output></label><input id="gain" type="range" min="10" max="500" step="5" value="100"></div>
+<div class="setting"><label for="dead">加速度閾値 <output id="deadV"></output></label><input id="dead" type="range" min="0" max="40" step="1" value="6"></div>
+<div class="setting"><label for="smooth">平滑化 <output id="smoothV"></output></label><input id="smooth" type="range" min="1" max="30" value="14"></div>
+<div class="setting"><label for="friction">積分速度の減衰 <output id="frictionV"></output></label><input id="friction" type="range" min="0" max="500" step="10" value="80"></div>
+<div class="setting"><label for="stationary">静止加速度閾値 <output id="stationaryV"></output></label><input id="stationary" type="range" min="3" max="50" step="1" value="12"></div>
+<div class="setting"><label for="hold">静止判定時間 <output id="holdV"></output></label><input id="hold" type="range" min="10" max="120" step="5" value="50"></div>
+<div class="setting"><label for="beta">Madgwick β <output id="betaV"></output></label><input id="beta" type="range" min="1" max="45" step="1" value="10"></div>
+<div class="setting"><label for="match">未加工データの一致許容差 <output id="matchV"></output></label><input id="match" type="range" min="10" max="90" step="5" value="35"></div>
+<label class="check"><input type="checkbox" id="auto" checked> 初回補正データとの一致で自動静止補正</label>
+<label class="check"><input type="checkbox" id="native" checked> OS提供の重力除去済み加速度を優先</label>
+<label class="check"><input type="checkbox" id="invertX"> 左右反転</label>
+<label class="check"><input type="checkbox" id="invertY" checked> 上下反転</label>
+<div class="row"><button id="defaults">設定初期化</button><button id="resetFilter">姿勢推定をリセット</button></div>
+<p class="help">倍率は 1m を何pxで表すか。感度は積分する加速度の倍率（100%を標準）。減衰は速度に作用し、座標に直接作用しません。</p>
+</section>
+<section class="panel">
+<h2>自動補正の考え方</h2>
+<p>初回補正時に、重力込み加速度と角速度の平均・ばらつきをメモリへ記録します。操作中に同じような値が一定時間安定した場合だけ、静止した可能性があるとして速度をゼロに戻し、残留オフセットとジャイロバイアスをゆっくり更新します。</p>
+<p><strong>操作平面の基準姿勢・移動済み座標は自動変更しません。</strong> 等速移動もセンサー上は静止に似るため、完全な自動判定ではありません。磁気センサー不使用のためヨー角ドリフトは残ります。</p>
+</section>
+</div>
+</main>
+<footer>zlib License · <a href="https://github.com/soone-y/Android-Mouse-PC-">Android-Mouse-PC-</a> · センサーデータの送信・収集・サーバー保存なし。設定のみブラウザ内に保存。</footer>
 <script>
-// Motion math is deliberately standalone and can be tested in Node without browser APIs.
-class MadgwickAHRS {
- constructor(beta=.1){this.beta=beta;this.reset()}
- reset(){this.q=[1,0,0,0]}
- updateIMU(gx,gy,gz,ax,ay,az,dt){if(![gx,gy,gz,ax,ay,az,dt].every(Number.isFinite)||dt<=0||dt>.1)return false;
- let [q0,q1,q2,q3]=this.q;let d0=.5*(-q1*gx-q2*gy-q3*gz),d1=.5*(q0*gx+q2*gz-q3*gy),d2=.5*(q0*gy-q1*gz+q3*gx),d3=.5*(q0*gz+q1*gy-q2*gx);
- const aSq=ax*ax+ay*ay+az*az;if(aSq>1e-10){const inv=1/Math.sqrt(aSq),x=ax*inv,y=ay*inv,z=az*inv;
- const q00=q0*q0,q11=q1*q1,q22=q2*q2,q33=q3*q3;
- let s0=4*q0*(q11+q22)+2*q2*x-2*q1*y;
- let s1=4*q1*q33-2*q3*x+4*q00*q1-2*q0*y-4*q1+8*q1*(q11+q22)+4*q1*z;
- let s2=4*q00*q2+2*q0*x+4*q2*q33-2*q3*y-4*q2+8*q2*(q11+q22)+4*q2*z;
- let s3=4*(q11+q22)*q3-2*q1*x-2*q2*y;const ss=s0*s0+s1*s1+s2*s2+s3*s3;
- if(ss>1e-12&&Number.isFinite(ss)){const n=1/Math.sqrt(ss);d0-=this.beta*s0*n;d1-=this.beta*s1*n;d2-=this.beta*s2*n;d3-=this.beta*s3*n}}
- const next=[q0+d0*dt,q1+d1*dt,q2+d2*dt,q3+d3*dt];const sq=next.reduce((a,b)=>a+b*b,0);if(sq<=1e-12||!Number.isFinite(sq))return false;this.q=next.map(x=>x/Math.sqrt(sq));return true}
- gravity(){const [a,b,c,d]=this.q;return [2*(b*d-a*c),2*(a*b+c*d),a*a-b*b-c*c+d*d]}
-}
-class ImuFusionEngine {
- constructor(filter=new MadgwickAHRS()){this.filter=filter;this.reset()}
- reset(){this.filter.reset();this.acc=null;this.accTime=null;this.gyroTime=null;this.bias=[0,0,0]}
- accelerometer(t,x,y,z){if([t,x,y,z].every(Number.isFinite)){this.acc=[x,y,z];this.accTime=t}}
- gyroscope(t,gx,gy,gz){if(!this.acc||!Number.isFinite(t)||![gx,gy,gz].every(Number.isFinite))return null;if(t<this.accTime||t-this.accTime>50)return null;
- const old=this.gyroTime;this.gyroTime=t;if(old===null)return null;const dt=(t-old)/1000;
- if(!this.filter.updateIMU(gx-this.bias[0],gy-this.bias[1],gz-this.bias[2],...this.acc,dt))return null;
- const g=this.filter.gravity();return this.acc.map((x,i)=>x-g[i]*9.80665)}
-}
-class MotionProcessor {
- constructor(){this.reset()}
- reset(){this.last=null;this.sx=0;this.sy=0;this.vx=0;this.vy=0;this.stable=0}
- update(t,ax,ay,c){if(![t,ax,ay].every(Number.isFinite))return {dx:0,dy:0,stationary:false};const last=this.last;this.last=t;if(last===null)return {dx:0,dy:0,stationary:false};const dt=(t-last)/1000;if(dt<=0||dt>.1){this.reset();this.last=t;return {dx:0,dy:0,stationary:false}}
- const alpha=Math.max(0,Math.min(1,1-Math.exp(-2*Math.PI*Math.max(0,c.smooth)*dt)));this.sx+=alpha*(ax-this.sx);this.sy+=alpha*(ay-this.sy);
- this.stable=Math.hypot(ax,ay)<c.stationary?this.stable+dt:0;const settled=this.stable>=c.hold;
- const dz=v=>Math.abs(v)<=c.dead?0:v-Math.sign(v)*c.dead;const x=dz(this.sx)*(c.invertX?-1:1),y=dz(this.sy)*(c.invertY?-1:1);
- if(c.mode==='DIRECT')return {dx:x*c.gain*dt,dy:y*c.gain*dt,stationary:settled};
- if(settled){this.vx=0;this.vy=0}else{this.vx+=x*dt;this.vy+=y*dt;const damp=Math.exp(-Math.max(0,c.friction)*dt);this.vx*=damp;this.vy*=damp}
- return {dx:this.vx*c.gain*dt,dy:this.vy*c.gain*dt,stationary:settled}}
-}
-if(typeof module!=='undefined'&&module.exports)module.exports={MadgwickAHRS,ImuFusionEngine,MotionProcessor};
-
-
-// A quaternion q rotates vectors from device coordinates into the filter's world frame.
-// q_anchor^-1 * q_current maps the current device vector into the INITIAL device axes.
-const AnchorMath = {
- conjugate(q){return [q[0],-q[1],-q[2],-q[3]]},
- mul(a,b){return [a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]]},
- rotate(q,v){const u=[0,...v];const r=this.mul(this.mul(q,u),this.conjugate(q));return r.slice(1)},
- norm(q){const n=Math.hypot(...q);return n>1e-12?q.map(v=>v/n):[1,0,0,0]},
- // Find shortest rotation from measured gravity direction to the initial +Z world axis.
- fromGravity(g){const n=Math.hypot(...g);if(n<1e-5)return null;const [x,y,z]=g.map(v=>v/n);const d=1+z;if(d<1e-6)return [0,1,0,0];return this.norm([d,y,-x,0])},
- inAnchor(qAnchor,qNow,linDevice){return this.rotate(this.norm(this.mul(this.conjugate(qAnchor),qNow)),linDevice)}
+'use strict';
+// Core math is standalone for Node-based smoke tests.
+const Vec3={norm:a=>Math.hypot(...a),sub:(a,b)=>a.map((x,i)=>x-b[i]),add:(a,b)=>a.map((x,i)=>x+b[i]),scale:(a,k)=>a.map(x=>x*k)};
+const Q={conj:q=>[q[0],-q[1],-q[2],-q[3]],mul:(a,b)=>[
+a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
+a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
+a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]],
+norm:q=>{const s=Math.hypot(...q);return s>1e-12?q.map(x=>x/s):[1,0,0,0]},
+rotate(q,v){return this.mul(this.mul(q,[0,...v]),this.conj(q)).slice(1)},
+fromGravity(g){const n=Vec3.norm(g);if(n<1e-6)return null;const [x,y,z]=g.map(v=>v/n),s=1+z;if(s<1e-7)return [0,1,0,0];return this.norm([s,y,-x,0])},
+toAnchor(q0,qt,v){return this.rotate(this.norm(this.mul(this.conj(q0),qt)),v)}
 };
-</script><script>
-(()=>{'use strict';const $=id=>document.getElementById(id),field=$('field'),cursor=$('cursor'),canvas=$('graph'),ctx=canvas.getContext('2d');const filter=new MadgwickAHRS(),fusion=new ImuFusionEngine(filter),processor=new MotionProcessor();
-const defaults={mode:'DIRECT',gain:80,dead:12,smooth:12,friction:8,stationary:8,hold:15,beta:10,invertX:false,invertY:true,pauseTouch:true,fusion:true};const state={active:false,ax:0,ay:0,posX:.5,posY:.5,pressed:false,drag:null,rawTime:null,orientation:null,simX:0,simY:0,hist:[],count:0,countAt:performance.now(),lastFrame:performance.now(),gyroSeen:false};
-let anchor=null, calibration=null, latestRaw=null, latestGyro=null, lastDeltaT=null;
-const numeric=['gain','dead','smooth','friction','stationary','hold','beta'];for(const k of Object.keys(defaults)){let v=defaults[k];try{const s=JSON.parse(localStorage.getItem('mouse-v2-settings')||'{}');if(typeof s[k]===typeof v)v=s[k]}catch{}if(typeof v==='boolean')$(k).checked=v;else $(k).value=v}
-function settings(){return {mode:$('mode').value,gain:+$('gain').value,dead:+$('dead').value/100,smooth:+$('smooth').value,friction:+$('friction').value,stationary:+$('stationary').value/100,hold:+$('hold').value/100,invertX:$('invertX').checked,invertY:$('invertY').checked}}
-function sync(){for(const k of numeric)$(k+'V').textContent=k==='dead'||k==='stationary'?(+$(k).value/100).toFixed(2):k==='hold'?(+$(k).value/100).toFixed(2):k==='beta'?(+$(k).value/100).toFixed(2):$(k).value;const save={};for(const k of Object.keys(defaults))save[k]=typeof defaults[k]==='boolean'?$(k).checked:typeof defaults[k]==='number'?+$(k).value:$(k).value;try{localStorage.setItem('mouse-v2-settings',JSON.stringify(save))}catch{}filter.beta=+$('beta').value/100}
-for(const k of Object.keys(defaults))$(k).addEventListener('input',()=>{sync();if(k==='mode'||k==='fusion')processor.reset()});sync();
-const setStatus=s=>$('status').textContent=s;function center(){state.posX=state.posY=.5;processor.reset();place()}function place(){state.posX=Math.max(0,Math.min(1,state.posX));state.posY=Math.max(0,Math.min(1,state.posY));cursor.style.left=(100*state.posX)+'%';cursor.style.top=(100*state.posY)+'%'}
-function reset(){fusion.reset();processor.reset();anchor=null;calibration=null;latestRaw=null;latestGyro=null;state.rawTime=null;state.orientation=null;state.gyroSeen=false;setStatus('推定を初期化しました。初回補正で操作平面を確定してください。');$('anchorStatus').textContent='平面は未固定です。'}
-function beginCalibration(){if(!state.active){setStatus('先にセンサーを開始してください。');return}calibration={started:performance.now(),a:[],g:[]};anchor=null;processor.reset();$('anchorStatus').textContent='初期補正中：スマホを約1秒間静止させてください。';}
-function finishCalibration(){if(!calibration||calibration.a.length<8||calibration.g.length<8){$('anchorStatus').textContent='補正に必要な加速度・角速度が不足しています。';calibration=null;return}
- const avg=rows=>[0,1,2].map(k=>rows.reduce((s,r)=>s+r[k],0)/rows.length);const grav=avg(calibration.a),bias=avg(calibration.g);
- const accelSpread=Math.sqrt(calibration.a.reduce((s,v)=>s+v.reduce((r,x,k)=>r+(x-grav[k])**2,0),0)/calibration.a.length);
- const gyroSpread=Math.sqrt(calibration.g.reduce((s,v)=>s+v.reduce((r,x,k)=>r+(x-bias[k])**2,0),0)/calibration.g.length);
- if(accelSpread>.45||Math.hypot(...bias)>.35||gyroSpread>.12){$('anchorStatus').textContent='動きが大きいため補正を中断しました。静止して再実行してください。';calibration=null;return}
- const q=AnchorMath.fromGravity(grav);if(!q){calibration=null;return}
- fusion.reset();fusion.filter.q=q;fusion.bias=bias;fusion.accelerometer(performance.now(),...grav);anchor=q.slice();processor.reset();calibration=null;
- $('anchorStatus').textContent='基準平面を固定しました。端末を回転しても初期XY方向へ射影します。補正の再実行で基準を変更できます。';setStatus('初期補正完了（傾きとジャイロ静止オフセット）。絶対方位は固定されません。')}
-
-function onMotion(e){if(!state.active)return;const t=performance.now(),a=e.accelerationIncludingGravity,lin=e.acceleration,rot=e.rotationRate;
- const aValid=a&&[a.x,a.y,a.z].every(Number.isFinite);
- const rotValid=rot&&[rot.beta,rot.gamma,rot.alpha].every(Number.isFinite);
- if(aValid){latestRaw=[a.x,a.y,a.z];fusion.accelerometer(t,...latestRaw)}
- if(rotValid)latestGyro=[rot.beta,rot.gamma,rot.alpha].map(x=>x*Math.PI/180);
- if(calibration){if(aValid)calibration.a.push(latestRaw);if(rotValid)calibration.g.push(latestGyro);if(t-calibration.started>1200)finishCalibration();return}
- let linear=null,source='';
- if($('fusion').checked&&aValid&&rotValid){
-   const estimatedLinear=fusion.gyroscope(t,...latestGyro);state.gyroSeen=true;
-   // Prefer platform-provided linear acceleration, which has already had gravity removed.
-   // This reduces spurious sideways movement while tilting as the AHRS catches up.
-   const nativeLinear=lin&&[lin.x,lin.y,lin.z].every(Number.isFinite)?[lin.x,lin.y,lin.z]:null;
-   linear=nativeLinear||estimatedLinear;
-   source=nativeLinear?'ネイティブ重力除去 + 初期平面':'Madgwick重力除去 + 初期平面';
-   if(linear&&anchor)linear=AnchorMath.inAnchor(anchor,filter.q,linear);
- }else if(!$('fusion').checked&&lin&&[lin.x,lin.y].every(Number.isFinite)){
-   linear=[lin.x,lin.y,Number(lin.z)||0];source='端末座標（回転補正なし）';
+class MadgwickAHRS {
+ constructor(beta=0.1){this.beta=beta;this.q=[1,0,0,0]}
+ reset(){this.q=[1,0,0,0]}
+ update(gx,gy,gz,ax,ay,az,dt){if(![gx,gy,gz,ax,ay,az,dt].every(Number.isFinite)||dt<=0||dt>0.1)return false;
+ let [w,x,y,z]=this.q;
+ let dw=.5*(-x*gx-y*gy-z*gz),dx=.5*(w*gx+y*gz-z*gy),dy=.5*(w*gy-x*gz+z*gx),dz=.5*(w*gz+x*gy-y*gx);
+ const as=ax*ax+ay*ay+az*az;
+ if(as>1e-10){const inv=1/Math.sqrt(as),u=ax*inv,v=ay*inv,t=az*inv,w2=w*w,x2=x*x,y2=y*y,z2=z*z;
+ let s0=4*w*(x2+y2)+2*y*u-2*x*v;
+ let s1=4*x*z2-2*z*u+4*w2*x-2*w*v-4*x+8*x*(x2+y2)+4*x*t;
+ let s2=4*w2*y+2*w*u+4*y*z2-2*z*v-4*y+8*y*(x2+y2)+4*y*t;
+ let s3=4*(x2+y2)*z-2*x*u-2*y*v;
+ const ss=s0*s0+s1*s1+s2*s2+s3*s3;
+ if(ss>1e-12&&Number.isFinite(ss)){const b=this.beta/Math.sqrt(ss);dw-=b*s0;dx-=b*s1;dy-=b*s2;dz-=b*s3}}
+ const next=[w+dw*dt,x+dx*dt,y+dy*dt,z+dz*dt],len=Math.hypot(...next);
+ if(!(len>1e-10)||!Number.isFinite(len))return false;this.q=next.map(v=>v/len);return true;
  }
- if(!linear)return;
- state.ax=linear[0];state.ay=linear[1];
- // Never feed a rotating body-frame fallback while fixed-plane mode is enabled.
- if($('fusion').checked&&!anchor)return;
- const d=processor.update(t,linear[0],linear[1],settings());
- if(!state.pressed||!$('pauseTouch').checked){state.posX+=d.dx/(field.clientWidth||1);state.posY+=d.dy/(field.clientHeight||1);place()}
- state.hist.push([linear[0],linear[1]]);if(state.hist.length>140)state.hist.shift();state.count++;
- if(state.count%50===0)setStatus('受信中: '+source+'。数値は端末内のみで処理します。');}
-async function start(){if(!window.isSecureContext){setStatus('HTTPSまたはlocalhostが必要です。');return}if(typeof DeviceMotionEvent==='undefined'){setStatus('このブラウザはDeviceMotionEventに対応していません。');return}try{if(typeof DeviceMotionEvent.requestPermission==='function'){const perm=await DeviceMotionEvent.requestPermission();if(perm!=='granted'){setStatus('センサーが許可されませんでした。');return}}reset();state.active=true;window.addEventListener('devicemotion',onMotion);setStatus('センサー待機中。端末を静止させ『初期補正』を押してください。')}catch(err){setStatus('センサー開始失敗: '+err.message)}}
-function stop(){state.active=false;window.removeEventListener('devicemotion',onMotion);state.ax=state.ay=0;processor.reset();anchor=null;calibration=null;$('anchorStatus').textContent='センサー停止中。初期平面は解除されています。';setStatus('センサー停止中。模擬入力は利用できます。')}
-$('start').addEventListener('click',start);$('stop').addEventListener('click',stop);$('zero').addEventListener('click',beginCalibration);$('resetFilter').addEventListener('click',reset);$('center').addEventListener('click',center);$('defaults').addEventListener('click',()=>{for(const [k,v] of Object.entries(defaults)){if(typeof v==='boolean')$(k).checked=v;else $(k).value=v;$(k).dispatchEvent(new Event('input'))}reset()});
-for(const b of document.querySelectorAll('[data-dir]')){const v=b.dataset.dir;b.addEventListener('pointerdown',e=>{b.setPointerCapture(e.pointerId);state.simX=v==='left'?-1:v==='right'?1:0;state.simY=v==='up'?-1:v==='down'?1:0});for(const event of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(event,()=>{state.simX=0;state.simY=0})}
-field.addEventListener('pointerdown',e=>{state.pressed=true;state.drag=[e.clientX,e.clientY];field.setPointerCapture(e.pointerId)});field.addEventListener('pointermove',e=>{if(!state.drag)return;state.posX+=(e.clientX-state.drag[0])/(field.clientWidth||1);state.posY+=(e.clientY-state.drag[1])/(field.clientHeight||1);state.drag=[e.clientX,e.clientY];place()});const up=()=>{state.pressed=false;state.drag=null};for(const e of ['pointerup','pointercancel','lostpointercapture'])field.addEventListener(e,up);
-$('selftest').addEventListener('click',()=>{const f=new MadgwickAHRS();let valid=true;for(let i=0;i<200;i++)valid=valid&&f.updateIMU(0,0,0,0,0,9.80665,.01);const m=new MotionProcessor(),cfg=settings();m.update(1000,0,0,cfg);const d=m.update(1100,2,0,cfg);$('diagnostics').textContent='Madgwick 静止テスト: '+(valid&&f.q.every(Number.isFinite)?'PASS':'FAIL')+' / カーソルX正方向: '+(d.dx>0!==cfg.invertX?'PASS':'FAIL')+' / 回転不変テスト: '+(Math.abs(AnchorMath.inAnchor([1,0,0,0],[Math.SQRT1_2,0,0,Math.SQRT1_2],[0,-2,0])[0]-2)<1e-8?'PASS':'FAIL')+'。実機精度の保証ではありません。'});
-function graph(){const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.round(w*dpr));canvas.height=Math.max(1,Math.round(h*dpr));ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.strokeStyle='#455670';ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();for(const [axis,col] of [[0,'#70e0d2'],[1,'#f5ae75']]){ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=2;state.hist.forEach((p,i)=>{const x=i/139*w,y=Math.max(3,Math.min(h-3,h/2-p[axis]*19));if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()}}
-function animate(now){const dt=Math.max(.001,Math.min(.05,(now-state.lastFrame)/1000));state.lastFrame=now;if(state.simX||state.simY){const d=processor.update(now,state.simX*1.8,state.simY*1.8,settings());state.posX+=d.dx/(field.clientWidth||1);state.posY+=d.dy/(field.clientHeight||1);place()}$('ax').textContent=state.ax.toFixed(2);$('ay').textContent=state.ay.toFixed(2);if(now-state.countAt>=1000){$('rate').textContent=state.count;state.count=0;state.countAt=now}graph();requestAnimationFrame(animate)}center();requestAnimationFrame(animate);document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
+ gravity(){const [w,x,y,z]=this.q;return [2*(x*z-w*y),2*(w*x+y*z),w*w-x*x-y*y+z*z]}
+}
+class SensorFusion {
+ constructor(){this.filter=new MadgwickAHRS();this.reset()}
+ reset(){this.filter.reset();this.t=null;this.acc=null;this.bias=[0,0,0];}
+ anchor(gravity,bias){this.reset();this.filter.q=Q.fromGravity(gravity)||[1,0,0,0];this.bias=bias.slice()}
+ update(t,acc,gyro,nativeLinear=null){if(!Number.isFinite(t)||!acc||!gyro)return null;
+ if(![...acc,...gyro].every(Number.isFinite))return null;
+ const prev=this.t;this.t=t;this.acc=acc.slice();if(prev===null)return null;
+ const dt=(t-prev)/1000;if(dt<=0||dt>0.1)return null;
+ if(!this.filter.update(...Vec3.sub(gyro,this.bias),...acc,dt))return null;
+ const g=this.filter.gravity().map(v=>v*9.80665);
+ const predicted=Vec3.sub(acc,g);
+ return {linear:nativeLinear&&nativeLinear.every(Number.isFinite)?nativeLinear:predicted,predicted,dt,q:this.filter.q.slice()};
+ }
+}
+class DistanceProcessor {
+ constructor(){this.reset()}
+ reset(){this.last=null;this.s=[0,0];this.v=[0,0];this.stable=0;this.x=[0,0]}
+ resetVelocity(){this.v=[0,0];this.s=[0,0];this.stable=0}
+ update(t,a,settings,forcedStationary=false){
+ if(!Number.isFinite(t)||!a.every(Number.isFinite))return {delta:[0,0],speed:0,stationary:false};
+ let previous=this.last;this.last=t;if(previous===null)return {delta:[0,0],speed:0,stationary:false};
+ const dt=(t-previous)/1000;if(dt<=0||dt>0.1){this.resetVelocity();return {delta:[0,0],speed:0,stationary:false}}
+ const alpha=1-Math.exp(-2*Math.PI*settings.smooth*dt);
+ this.s[0]+=alpha*(a[0]-this.s[0]);this.s[1]+=alpha*(a[1]-this.s[1]);
+ const isQuiet=Math.hypot(...a)<settings.stationary;
+ this.stable=isQuiet?this.stable+dt:0;const stopped=forcedStationary||this.stable>=settings.hold;
+ const dz=v=>Math.abs(v)<settings.dead?0:v-Math.sign(v)*settings.dead;
+ const accel=[dz(this.s[0])*(settings.invertX?-1:1),dz(this.s[1])*(settings.invertY?-1:1)];
+ if(settings.mode==='DIRECT'){
+ const delta=stopped?[0,0]:accel.map(x=>x*settings.directGain*dt/settings.scale);
+ this.x=Vec3.add(this.x,delta);return {delta,speed:0,stationary:stopped};
+ }
+ const start=this.v.slice();
+ if(stopped)this.v=[0,0];else{
+ const decay=Math.exp(-settings.friction*dt);
+ this.v=this.v.map((v,i)=>(v+accel[i]*settings.gain*dt)*decay);
+ }
+ const delta=stopped?[0,0]:this.v.map((v,i)=>(start[i]+v)*0.5*dt);
+ this.x=Vec3.add(this.x,delta);
+ return {delta,speed:Math.hypot(...this.v),stationary:stopped};
+ }
+}
+class StationaryMatcher {
+ constructor(){this.reset()}
+ reset(){this.reference=null;this.samples=[];this.holdStart=null;this.lastFix=-Infinity;this.matchDuration=0;this.matched=false}
+ setReference(accSamples,gyroSamples){
+ const mean=ss=>[0,1,2].map(k=>ss.reduce((sum,v)=>sum+v[k],0)/ss.length);
+ const rms=(ss,avg)=>Math.sqrt(ss.reduce((sum,v)=>sum+Vec3.sub(v,avg).reduce((s,n)=>s+n*n,0),0)/ss.length);
+ const acc=mean(accSamples),gyro=mean(gyroSamples);
+ this.reset();this.reference={acc,gyro,accNoise:rms(accSamples,acc),gyroNoise:rms(gyroSamples,gyro),sampleCount:accSamples.length,rawAcceleration:accSamples.map(row=>row.slice()),rawGyroscope:gyroSamples.map(row=>row.slice())};return this.reference;
+ }
+ observe(t,acc,gyro,allowed=true,threshold=.35){
+ if(!allowed||!this.reference||!acc||!gyro)return {matched:false,correction:false};
+ if(![...acc,...gyro,t].every(Number.isFinite))return {matched:false,correction:false};
+ this.samples.push({t,acc:acc.slice(),gyro:gyro.slice()});
+ while(this.samples.length>60||this.samples.length&&this.samples[0].t<t-600)this.samples.shift();
+ const ref=this.reference;
+ const accErr=Vec3.norm(Vec3.sub(acc,ref.acc));
+ const gyroErr=Vec3.norm(Vec3.sub(gyro,ref.gyro));
+ const valid=accErr<threshold&&gyroErr<.10;
+ if(!valid){this.holdStart=null;this.matched=false;return {matched:false,correction:false,accErr,gyroErr}}
+ if(this.holdStart===null)this.holdStart=t;
+ const stableSamples=this.samples.filter(s=>s.t>=t-350);
+ const avg=ss=>[0,1,2].map(k=>ss.reduce((sum,v)=>sum+v[k],0)/ss.length);
+ const avA=avg(stableSamples.map(s=>s.acc)),avG=avg(stableSamples.map(s=>s.gyro));
+ const spreadA=Math.sqrt(stableSamples.reduce((s,v)=>s+Vec3.norm(Vec3.sub(v.acc,avA))**2,0)/stableSamples.length);
+ const spreadG=Math.sqrt(stableSamples.reduce((s,v)=>s+Vec3.norm(Vec3.sub(v.gyro,avG))**2,0)/stableSamples.length);
+ this.matched=(t-this.holdStart>=500&&stableSamples.length>=8&&spreadA<Math.max(.12,ref.accNoise*2+.07)&&spreadG<Math.max(.04,ref.gyroNoise*2+.025));
+ const correction=this.matched&&(t-this.lastFix>200);if(correction)this.lastFix=t;
+ return {matched:this.matched,correction,accErr,gyroErr,avgGyro:avG,spreadA};
+ }
+}
+if(typeof module!=='undefined'&&module.exports)module.exports={Q,MadgwickAHRS,SensorFusion,DistanceProcessor,StationaryMatcher};
+</script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),C=$('plane'),G=$('graph'),ctx=C.getContext('2d'),gc=G.getContext('2d');
+const fusion=new SensorFusion(),motion=new DistanceProcessor(),matcher=new StationaryMatcher();
+const defaults={mode:'INTEGRATED',scale:2500,gain:100,dead:6,smooth:14,friction:80,stationary:12,hold:50,beta:10,match:35,auto:true,native:true,invertX:false,invertY:true};
+const state={active:false,anchor:null,cal:null,pos:[0,0],cam:[0,0],trail:[],lastEvent:null,accXY:[0,0],latestRaw:null,latestGyro:null,shift:[0,0],sim:[0,0],simTime:null,calSamples:0,fixCount:0,statusStamp:0,history:[],touch:null,autoTest:null,input:'なし'};
+try{const settings=JSON.parse(localStorage.getItem('sensorMouse-v4')||'{}');for(const k in defaults){if(typeof settings[k]===typeof defaults[k]){if(typeof defaults[k]==='boolean')$(k).checked=settings[k];else $(k).value=settings[k]}else if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k]}}
+catch{for(const k in defaults){if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k]}}
+function settings(){return {mode:$('mode').value,scale:+$('scale').value,gain:+$('gain').value/100, directGain:(+$('gain').value/100)*100,dead:+$('dead').value/100,smooth:+$('smooth').value,friction:+$('friction').value/100,stationary:+$('stationary').value/100,hold:+$('hold').value/100,match:+$('match').value/100,auto:$('auto').checked,native:$('native').checked,invertX:$('invertX').checked,invertY:$('invertY').checked}}
+function label(){for(const [k,fmt] of Object.entries({scale:v=>v+' px/m',gain:v=>v+'%',dead:v=>(v/100).toFixed(2)+' m/s²',smooth:v=>v+' Hz',friction:v=>(v/100).toFixed(2)+' /s',stationary:v=>(v/100).toFixed(2)+' m/s²',hold:v=>(v/100).toFixed(2)+' s',beta:v=>(v/100).toFixed(2),match:v=>(v/100).toFixed(2)+' m/s²'}))$(k+'V').textContent=fmt(+$(k).value)}
+function persist(){const o={};for(const k in defaults)o[k]=typeof defaults[k]==='boolean'?$(k).checked:typeof defaults[k]==='number'?+$(k).value:$(k).value;try{localStorage.setItem('sensorMouse-v4',JSON.stringify(o))}catch{}}
+for(const k in defaults)$(k).addEventListener('input',()=>{label();persist();fusion.filter.beta=+$('beta').value/100;if(k==='mode')motion.resetVelocity()});label();fusion.filter.beta=+$('beta').value/100;
+function status(s,warn=false){$('status').textContent=s;$('status').className='stat'+(warn?' warning':'')}
+function log(s){const a=new Date();$('log').textContent=a.toLocaleTimeString()+' '+s+'\n'+$('log').textContent.slice(0,800)}
+function reorigin(){motion.reset();state.pos=[0,0];state.cam=[0,0];state.trail=[];status('座標を原点に戻しました。初期補正の姿勢基準は維持します。')}
+function fullReset(){fusion.reset();motion.reset();matcher.reset();state.anchor=null;state.cal=null;state.pos=[0,0];state.cam=[0,0];state.trail=[];state.shift=[0,0];state.latestRaw=null;state.latestGyro=null;state.lastEvent=null;state.accXY=[0,0];$('calStatus').textContent='初回補正が必要です。';$('autoLabel').textContent='自動補正：未設定';}
+function startCalibration(){if(!state.active){status('まずセンサーを開始してください。',true);return}state.cal={start:performance.now(),a:[],g:[]};state.anchor=null;motion.resetVelocity();status('初回補正中：端末を約1.3秒、静止させてください。');}
+function finishCalibration(){const cal=state.cal;if(!cal)return;
+ if(cal.a.length<12||cal.g.length<12){status('補正失敗：未加工データのサンプルが不足しています。',true);state.cal=null;return}
+ const ref=matcher.setReference(cal.a,cal.g);const gm=Vec3.norm(ref.acc);
+ if(ref.accNoise>.4||ref.gyroNoise>.12||Vec3.norm(ref.gyro)>.35||Math.abs(gm-9.80665)>1.4){status('補正失敗：静止状態が安定しないか重力値が不適切です。やり直してください。',true);matcher.reset();state.cal=null;return}
+ fusion.anchor(ref.acc,ref.gyro);fusion.filter.beta=+$('beta').value/100;state.anchor=fusion.filter.q.slice();state.shift=[0,0];motion.resetVelocity();state.cal=null;state.fixCount=0;
+ const msg='補正完了：'+ref.sampleCount+'点、加速度雑音 '+ref.accNoise.toFixed(3)+'m/s²、角速度雑音 '+ref.gyroNoise.toFixed(4)+'rad/s。';$('calStatus').textContent=msg;status('初期平面を固定しました。加工前の静止パターンと一致すると自動補正します。');log(msg);
+}
+function processInput(t,raw,gyro,nativeLinear=null){
+ if(state.cal){if(raw)state.cal.a.push(raw.slice());if(gyro)state.cal.g.push(gyro.slice());if(t-state.cal.start>1300)finishCalibration();return;}
+ if(!state.anchor||!raw||!gyro)return;
+ const result=fusion.update(t,raw,gyro,settings().native?nativeLinear:null);if(!result)return;
+ // qAnchor^-1 * qCurrent rotates a device measurement into the INITIAL device frame.
+ const vector=Q.toAnchor(state.anchor,result.q,result.linear);
+ const current=[vector[0]-state.shift[0],vector[1]-state.shift[1]];
+ let match={matched:false,correction:false};const cfg=settings();
+ if(cfg.auto){match=matcher.observe(t,raw,gyro,true,cfg.match);if(match.correction){
+ // Zero velocity only; never overwrite the anchor orientation or already accumulated position.
+ motion.resetVelocity();
+ for(let k=0;k<3;k++)fusion.bias[k]=.98*fusion.bias[k]+.02*match.avgGyro[k];
+ for(let k=0;k<2;k++)state.shift[k]=Math.max(-.35,Math.min(.35,.985*state.shift[k]+.015*vector[k]));
+ state.fixCount++;if(state.fixCount===1||state.fixCount%20===0)log('静止パターン一致：ZUPT / バイアス微調整 ('+state.fixCount+'回)');
+ }}
+ const out=motion.update(t,current,cfg,match.matched);state.pos=motion.x.slice();state.accXY=current;
+ state.history.push(current);if(state.history.length>160)state.history.shift();
+ if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}
+ $('autoLabel').textContent=cfg.auto?(match.matched?'自動補正：静止一致 ('+state.fixCount+')':'自動補正：監視中'):'自動補正：OFF';
+ state.input=(nativeLinear&&cfg.native)?'OS重力補正 + IMU回転':'Madgwick重力補正 + IMU回転';
+}
+function onMotion(e){if(!state.active)return;const t=performance.now();
+ const a=e.accelerationIncludingGravity,rot=e.rotationRate,lin=e.acceleration;
+ const raw=a&&[a.x,a.y,a.z].every(Number.isFinite)?[a.x,a.y,a.z]:null;
+ // DeviceMotionEvent rotationRate units: degrees per second, axes beta(X), gamma(Y), alpha(Z).
+ const gyro=rot&&[rot.beta,rot.gamma,rot.alpha].every(Number.isFinite)?[rot.beta,rot.gamma,rot.alpha].map(v=>v*Math.PI/180):null;
+ const native=lin&&[lin.x,lin.y,lin.z].every(Number.isFinite)?[lin.x,lin.y,lin.z]:null;
+ state.latestRaw=raw;state.latestGyro=gyro;
+ processInput(t,raw,gyro,native);
+}
+async function start(){if(!window.isSecureContext){status('HTTPSかlocalhostが必要です。',true);return}if(typeof DeviceMotionEvent==='undefined'){status('端末ブラウザがDeviceMotionEventに未対応です。',true);return}
+ try{if(typeof DeviceMotionEvent.requestPermission==='function'){const p=await DeviceMotionEvent.requestPermission();if(p!=='granted')throw Error('センサー権限が拒否されました')}
+ if(state.active)return;fullReset();state.active=true;window.addEventListener('devicemotion',onMotion);status('センサー開始。端末を静止させて「初回補正」を押してください。')}
+ catch(e){status('開始できません：'+e.message,true)}}
+function stop(){state.active=false;window.removeEventListener('devicemotion',onMotion);state.cal=null;motion.resetVelocity();status('センサー停止中。模擬入力は可能です。')}
+$('start').onclick=start;$('stop').onclick=stop;$('calibrate').onclick=startCalibration;$('center').onclick=()=>{state.cam=state.pos.slice()};$('origin').onclick=reorigin;
+$('resetFilter').onclick=()=>{fullReset();status('姿勢推定を初期化しました。再度、初回補正してください。')};
+$('clearTrail').onclick=()=>{state.trail=[];log('軌跡を消去しました。')};
+$('defaults').onclick=()=>{for(const k in defaults){if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k];$(k).dispatchEvent(new Event('input'))}motion.resetVelocity();status('設定を初期化しました。')};
+const dirs=new Map();for(const b of document.querySelectorAll('[data-dir]')){const name=b.dataset.dir;const st=e=>{e.preventDefault();dirs.set(name,true);try{b.setPointerCapture(e.pointerId)}catch{}};const end=()=>dirs.delete(name);b.addEventListener('pointerdown',st);for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,end)}
+const view=$('viewport');view.addEventListener('pointerdown',e=>{state.touch={x:e.clientX,y:e.clientY};view.setPointerCapture(e.pointerId)});view.addEventListener('pointermove',e=>{if(!state.touch)return;const cfg=settings();state.cam[0]-=(e.clientX-state.touch.x)/cfg.scale;state.cam[1]-=(e.clientY-state.touch.y)/cfg.scale;state.touch={x:e.clientX,y:e.clientY}});for(const ev of ['pointerup','pointercancel','lostpointercapture'])view.addEventListener(ev,()=>state.touch=null);
+$('testPulse').onclick=()=>{state.autoTest={start:performance.now()};log('往復模擬入力：正方向加速→負方向減速で計算。')};
+function sampleSim(now,dt){let x=(dirs.has('right')?1:0)-(dirs.has('left')?1:0),y=(dirs.has('down')?1:0)-(dirs.has('up')?1:0);
+ let g=0;if(state.autoTest){const sec=(now-state.autoTest.start)/1000;if(sec>=2.0)state.autoTest=null;else g=sec<1?1:-1}
+ x=x*1.5+g*1.2;y=y*1.5;
+ if(x||y){const cfg=settings(),current=[x,y];const o=motion.update(now,current,cfg,false);state.pos=motion.x.slice();state.accXY=current;state.history.push(current);if(state.history.length>160)state.history.shift();if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}state.input='模擬加速度';}
+ else if(!state.active&&motion.last!==null){motion.update(now,[0,0],settings(),false);state.pos=motion.x.slice()}
+}
+function canvasReady(cv,c){const rect=cv.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2.5);const w=Math.max(1,rect.width),h=Math.max(1,rect.height);const pw=Math.round(w*dpr),ph=Math.round(h*dpr);if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph}c.setTransform(dpr,0,0,dpr,0,0);return {w,h};}
+function point(c,x,y,r,color){c.fillStyle=color;c.beginPath();c.arc(x,y,r,0,2*Math.PI);c.fill()}
+function drawPlane(){const {w,h}=canvasReady(C,ctx);ctx.fillStyle='#081727';ctx.fillRect(0,0,w,h);const s=settings().scale;
+ // Pan only after the cursor approaches the central 55% area; the logical position is never clipped.
+ const cursorX=w/2+(state.pos[0]-state.cam[0])*s,cursorY=h/2+(state.pos[1]-state.cam[1])*s;
+ if(!state.touch){const limX=w*.26,limY=h*.27;if(cursorX>w/2+limX)state.cam[0]+=(cursorX-(w/2+limX))/s;else if(cursorX<w/2-limX)state.cam[0]+=(cursorX-(w/2-limX))/s;if(cursorY>h/2+limY)state.cam[1]+=(cursorY-(h/2+limY))/s;else if(cursorY<h/2-limY)state.cam[1]+=(cursorY-(h/2-limY))/s;}
+ const wx=x=>w/2+(x-state.cam[0])*s,wy=y=>h/2+(y-state.cam[1])*s;
+ const minX=state.cam[0]-w/(2*s),maxX=state.cam[0]+w/(2*s),minY=state.cam[1]-h/(2*s),maxY=state.cam[1]+h/(2*s);
+ let step=.01;while(step*s<9)step*=2;while(step*s>65)step/=2;const loX=Math.ceil(minX/step),hiX=Math.floor(maxX/step),loY=Math.ceil(minY/step),hiY=Math.floor(maxY/step);
+ for(let i=loX;i<=hiX;i++)for(let j=loY;j<=hiY;j++){
+ const x=i*step,y=j*step;const strong=Math.abs(x/.1-Math.round(x/.1))<1e-5&&Math.abs(y/.1-Math.round(y/.1))<1e-5;
+ point(ctx,wx(x),wy(y),strong?1.9:0.75,strong?'#537999':'#28435a');}
+ ctx.strokeStyle='#48647c';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(wx(0),0);ctx.lineTo(wx(0),h);ctx.moveTo(0,wy(0));ctx.lineTo(w,wy(0));ctx.stroke();
+ if(state.trail.length>1){ctx.beginPath();state.trail.forEach((p,i)=>{if(i===0)ctx.moveTo(wx(p[0]),wy(p[1]));else ctx.lineTo(wx(p[0]),wy(p[1]))});ctx.strokeStyle='#62d4bba8';ctx.lineWidth=1.4;ctx.stroke()}
+ point(ctx,wx(0),wy(0),4,'#f6b56b');ctx.font='11px system-ui';ctx.fillStyle='#f6c68b';ctx.fillText('原点',wx(0)+8,wy(0)-7);
+ const cx=wx(state.pos[0]),cy=wy(state.pos[1]);ctx.strokeStyle='#a3ffec';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx-10,cy);ctx.lineTo(cx+10,cy);ctx.moveTo(cx,cy-10);ctx.lineTo(cx,cy+10);ctx.stroke();point(ctx,cx,cy,2.8,'#eafffd');
+}
+function drawGraph(){const {w,h}=canvasReady(G,gc);gc.clearRect(0,0,w,h);gc.strokeStyle='#415371';gc.beginPath();gc.moveTo(0,h/2);gc.lineTo(w,h/2);gc.stroke();for(const [idx,col] of [[0,'#73ead5'],[1,'#f5b477']]){gc.strokeStyle=col;gc.lineWidth=1.7;gc.beginPath();state.history.forEach((p,i)=>{const x=i/159*w,y=Math.min(h-2,Math.max(2,h/2-p[idx]*23));if(i===0)gc.moveTo(x,y);else gc.lineTo(x,y)});gc.stroke()}}
+let frameTime=performance.now(),frameCount=0;function frame(now){const dt=Math.min(.05,Math.max(.001,(now-frameTime)/1000));frameTime=now;
+ if(dirs.size||state.autoTest)sampleSim(now,dt);
+ drawPlane();if((frameCount++%3)===0)drawGraph();
+ $('coordX').textContent=(state.pos[0]*100).toFixed(1);$('coordY').textContent=(state.pos[1]*100).toFixed(1);
+ $('speed').textContent=settings().mode==='INTEGRATED'?(Math.hypot(...motion.v)*100).toFixed(1):'—';
+ $('displayPx').textContent=(Math.hypot(...state.pos)*settings().scale).toFixed(0);
+ $('ax').textContent=state.accXY[0].toFixed(2);$('ay').textContent=state.accXY[1].toFixed(2);$('inputLabel').textContent='入力：'+state.input;
+ requestAnimationFrame(frame)}requestAnimationFrame(frame);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
 })();
 </script>
-</body></html>
+</body>
+</html>
