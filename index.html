@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1424">
-<title>Sensor Mouse Lab v5 — Diagnostics</title>
+<title>Sensor Mouse Lab v6 — Physical Integration</title>
 <style>
 :root{color-scheme:dark;font:15px/1.55 system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#0b1424;color:#e9f0fc}
 *{box-sizing:border-box}body{max-width:1060px;margin:auto;padding:14px}h1{font-size:1.6rem;margin:.2rem 0}h2{font-size:1.06rem;margin:0 0 12px}p{margin:8px 0;color:#adbed5}small,.sub{color:#98b2cf}.pill{display:inline-block;border:1px solid #54748c;border-radius:18px;padding:3px 8px;font-size:.75rem;color:#8be6d3}
@@ -15,9 +15,9 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 </head>
 <body>
 <header>
-<span class="pill">IMU v5 · 基準平面 / 二重積分 / 内部データの診断</span>
+<span class="pill">IMU v6 · 生加速度の時間積分 / 比較診断</span>
 <h1>Sensor Mouse Lab</h1>
-<p>初回補正時の端末XY平面を基準に固定し、移動量を拡大表示します。ブラウザ内の検証専用で、PCのマウスやBluetoothには接続しません。</p>
+<p>初回補正時の端末XY平面を基準に固定し、補正済み加速度から物理的に速度・位置を積分します。ブラウザ内の検証専用で、PCのマウスやBluetoothには接続しません。</p>
 </header>
 <main>
 <div>
@@ -33,6 +33,9 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 <div class="metric"><strong id="displayPx">0</strong><span>原点からの表示距離 (px)</span></div>
 <div class="metric"><strong id="ax">0.00</strong><span>補正加速度X</span></div>
 <div class="metric"><strong id="ay">0.00</strong><span>補正加速度Y</span></div>
+<div class="metric"><strong id="rawSpeed">0.0</strong><span>ゼロ補正なし速度 (cm/s)</span></div>
+<div class="metric"><strong id="legacySpeed">0.0</strong><span>従来方式の速度 (cm/s)</span></div>
+<div class="metric"><strong id="rawCoord">0, 0</strong><span>ゼロ補正なし座標 (cm)</span></div>
 </div>
 <div class="row"><button data-dir="left">← 模擬</button><button data-dir="up">↑</button><button data-dir="down">↓</button><button data-dir="right">→</button><button id="testPulse">往復移動テスト</button><button id="clearTrail">軌跡消去</button></div>
 <p class="help">模擬ボタンは押している間、一定の加速度を加えます。「往復移動テスト」は正負対称の加速度から、移動と停止を再現します。表示は常に広域座標から計算し、画面外へ移動しても座標は失われません。</p>
@@ -56,7 +59,7 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 <label for="actualY">実測 Y (cm) <input type="number" id="actualY" step="0.1" placeholder="未入力" inputmode="decimal"></label>
 </div>
 <p id="trialResult" class="stat">マークを付けると、区間内の推定変位と、入力した実測変位との差を表示します。</p>
-<p class="help">CSVは各時刻の数値比較用、JSONは補正サンプル・設定・イベントマークを含む解析用です。記録データはサーバーに送信せず、ブラウザを閉じれば失われます。共有する場合は、センサー値・時刻・操作状況が含まれる点に注意してください。マークのための画面操作そのものもセンサーに反映されます。</p>
+<p class="help">物理推定と純粋積分には加速度の平滑化・デッドゾーン・減衰を適用しません。<code>uncorrected_*</code>はZUPTも加えない基準値です。</p><p class="help">CSVは各時刻の数値比較用、JSONは補正サンプル・設定・イベントマークを含む解析用です。記録データはサーバーに送信せず、ブラウザを閉じれば失われます。共有する場合は、センサー値・時刻・操作状況が含まれる点に注意してください。マークのための画面操作そのものもセンサーに反映されます。</p>
 </section>
 <section class="panel">
 <h2>補正データと動作状態</h2>
@@ -71,26 +74,27 @@ main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:13
 <section class="panel">
 <h2>操作・表示設定</h2>
 <label for="mode">移動モデル</label>
-<select id="mode"><option value="INTEGRATED">速度→距離の二重積分（実験）</option><option value="DIRECT">加速度→カーソル速度（比較用）</option></select>
+<select id="mode"><option value="INTEGRATED">新方式：物理積分（表示）</option><option value="LEGACY">従来方式：平滑化＋減衰（比較）</option><option value="DIRECT">加速度→カーソル速度（旧比較）</option></select>
 <div class="setting"><label for="scale">表示倍率 <output id="scaleV"></output></label><input id="scale" type="range" min="200" max="8000" step="100" value="2500"></div>
-<div class="setting"><label for="gain">操作感度 <output id="gainV"></output></label><input id="gain" type="range" min="10" max="500" step="5" value="100"></div>
-<div class="setting"><label for="dead">加速度閾値 <output id="deadV"></output></label><input id="dead" type="range" min="0" max="40" step="1" value="6"></div>
-<div class="setting"><label for="smooth">平滑化 <output id="smoothV"></output></label><input id="smooth" type="range" min="1" max="30" value="14"></div>
-<div class="setting"><label for="friction">積分速度の減衰 <output id="frictionV"></output></label><input id="friction" type="range" min="0" max="500" step="10" value="80"></div>
-<div class="setting"><label for="stationary">静止加速度閾値 <output id="stationaryV"></output></label><input id="stationary" type="range" min="3" max="50" step="1" value="12"></div>
-<div class="setting"><label for="hold">静止判定時間 <output id="holdV"></output></label><input id="hold" type="range" min="10" max="120" step="5" value="50"></div>
+<p class="help">物理積分は感度100%固定で、減衰・平滑化・加速度閾値を適用しません。次の調整項目は旧方式との比較専用です。</p>
+<div class="setting"><label for="gain">旧方式の操作感度 <output id="gainV"></output></label><input id="gain" type="range" min="10" max="500" step="5" value="100"></div>
+<div class="setting"><label for="dead">旧方式の加速度閾値 <output id="deadV"></output></label><input id="dead" type="range" min="0" max="40" step="1" value="6"></div>
+<div class="setting"><label for="smooth">旧方式の平滑化 <output id="smoothV"></output></label><input id="smooth" type="range" min="1" max="30" value="14"></div>
+<div class="setting"><label for="friction">旧方式の積分速度減衰 <output id="frictionV"></output></label><input id="friction" type="range" min="0" max="500" step="10" value="80"></div>
+<div class="setting"><label for="stationary">静止旧方式の加速度閾値 <output id="stationaryV"></output></label><input id="stationary" type="range" min="3" max="50" step="1" value="12"></div>
+<div class="setting"><label for="hold">旧方式の静止判定時間 <output id="holdV"></output></label><input id="hold" type="range" min="10" max="120" step="5" value="50"></div>
 <div class="setting"><label for="beta">Madgwick β <output id="betaV"></output></label><input id="beta" type="range" min="1" max="45" step="1" value="10"></div>
 <div class="setting"><label for="match">未加工データの一致許容差 <output id="matchV"></output></label><input id="match" type="range" min="10" max="90" step="5" value="35"></div>
-<label class="check"><input type="checkbox" id="auto" checked> 初回補正データとの一致で自動静止補正</label>
+<label class="check"><input type="checkbox" id="auto" checked> 生データ静止一致時に物理推定速度をゼロ補正（比較用の純粋積分には非適用）</label>
 <label class="check"><input type="checkbox" id="native" checked> OS提供の重力除去済み加速度を優先</label>
 <label class="check"><input type="checkbox" id="invertX"> 左右反転</label>
 <label class="check"><input type="checkbox" id="invertY" checked> 上下反転</label>
 <div class="row"><button id="defaults">設定初期化</button><button id="resetFilter">姿勢推定をリセット</button></div>
-<p class="help">倍率は 1m を何pxで表すか。感度は積分する加速度の倍率（100%を標準）。減衰は速度に作用し、座標に直接作用しません。</p>
+<p class="help">表示倍率はpx/mで、推定されたメートル単位の座標には作用しません。新方式は減衰なし、台形公式による二重積分。初期値は静止状態で速度ゼロと仮定します。</p>
 </section>
 <section class="panel">
 <h2>自動補正の考え方</h2>
-<p>初回補正時に、重力込み加速度と角速度の平均・ばらつきをメモリへ記録します。操作中に同じような値が一定時間安定した場合だけ、静止した可能性があるとして速度をゼロに戻し、残留オフセットとジャイロバイアスをゆっくり更新します。</p>
+<p>初回補正時の重力込み加速度と角速度を記録します。同じ生値が約0.5秒安定した場合、表示用の物理積分に限り速度をゼロにします（ZUPT）。その一方で<strong>静止補正なしの純粋な積分</strong>を独立に継続し、誤差を検査できます。</p>
 <p><strong>操作平面の基準姿勢・移動済み座標は自動変更しません。</strong> 等速移動もセンサー上は静止に似るため、完全な自動判定ではありません。磁気センサー不使用のためヨー角ドリフトは残ります。</p>
 </section>
 </div>
@@ -143,7 +147,7 @@ class SensorFusion {
  return {linear:nativeLinear&&nativeLinear.every(Number.isFinite)?nativeLinear:predicted,predicted,dt,q:this.filter.q.slice()};
  }
 }
-class DistanceProcessor {
+class LegacyDistanceProcessor {
  constructor(){this.reset()}
  reset(){this.last=null;this.s=[0,0];this.v=[0,0];this.stable=0;this.x=[0,0]}
  resetVelocity(){this.v=[0,0];this.s=[0,0];this.stable=0}
@@ -169,6 +173,35 @@ class DistanceProcessor {
  const delta=stopped?[0,0]:this.v.map((v,i)=>(start[i]+v)*0.5*dt);
  this.x=Vec3.add(this.x,delta);
  return {delta,speed:Math.hypot(...this.v),stationary:stopped};
+ }
+}
+/** Physically dimensioned, trapezoidal acceleration->velocity->position integrator.
+ * Input a is in m/s² in the calibrated device plane; output x is in metres.
+ * No filtering, dead zone, gain, or artificial velocity damping.
+ * ZUPT is an explicit optional constraint, never inferred from small acceleration.
+ */
+class DistanceProcessor {
+ constructor(){this.reset()}
+ reset(){this.last=null;this.previousA=null;this.v=[0,0];this.x=[0,0];this.lastDv=[0,0];this.lastDt=0;this.lastGap=false}
+ resetVelocity(){this.v=[0,0];this.lastDv=[0,0];this.previousA=null;this.last=null}
+ update(t,a,cfg={},forcedStationary=false){
+  if(!Number.isFinite(t)||!a||!a.every(Number.isFinite))return {delta:[0,0],speed:Math.hypot(...this.v),stationary:false,dt:0,dv:[0,0]};
+  // Sign inversion changes the chosen display axes, not the magnitude or units.
+  const current=[a[0]*(cfg.invertX?-1:1),a[1]*(cfg.invertY?-1:1)];
+  const previous=this.last;
+  this.last=t;
+  if(previous===null||this.previousA===null){this.previousA=current;return {delta:[0,0],speed:Math.hypot(...this.v),stationary:!!forcedStationary,dt:0,dv:[0,0]}}
+  const dt=(t-previous)/1000;
+  if(!(dt>0)||dt>0.1){this.previousA=current;this.lastGap=true;this.v=[0,0];return {delta:[0,0],speed:0,stationary:false,gapReset:true,dt,dv:[0,0]}}
+  this.lastGap=false;
+  const dv=current.map((value,i)=>.5*(this.previousA[i]+value)*dt);
+  this.previousA=current;
+  this.lastDv=dv.slice();this.lastDt=dt;
+  if(forcedStationary){this.v=[0,0];return {delta:[0,0],speed:0,stationary:true,dt,dv}}
+  const next=this.v.map((v,i)=>v+dv[i]);
+  const delta=next.map((v,i)=>.5*(this.v[i]+v)*dt);
+  this.v=next;this.x=this.x.map((x,i)=>x+delta[i]);
+  return {delta,speed:Math.hypot(...this.v),stationary:false,dt,dv};
  }
 }
 class StationaryMatcher {
@@ -210,14 +243,14 @@ class DiagnosticRecorder {
  mark(name,t,detail={}){if(this.startedMs===null)return;this.events.push({t_ms:+(t-this.startedMs).toFixed(3),event:name,...detail});}
  append(t,data){if(!this.active)return false;if(this.samples.length>=this.maxSamples){this.stop(t,'sample_limit');return false;}this.samples.push({t_ms:+(t-this.startedMs).toFixed(3),...data});return true;}
  stop(t,reason='manual'){if(this.startedMs===null)return;this.mark('recording_stop',t,{reason});this.active=false;this.stoppedMs=t;this.reason=reason;}
- snapshot(){return {schema:'sensor-mouse-v5-diagnostics/1',units:{acceleration:'m/s^2',angularVelocity:'rad/s',position:'m',velocity:'m/s',time:'ms'},startedAt:new Date(this.startedWallMs).toISOString(),durationMs:(this.stoppedMs??performance.now())-this.startedMs,settingsAtStart:this.settings,calibration:this.calibration,events:this.events,samples:this.samples,reason:this.reason}}
+ snapshot(){return {schema:'sensor-mouse-v6-diagnostics/2',units:{acceleration:'m/s^2',angularVelocity:'rad/s',position:'m',velocity:'m/s',time:'ms'},startedAt:new Date(this.startedWallMs).toISOString(),durationMs:(this.stoppedMs??performance.now())-this.startedMs,settingsAtStart:this.settings,calibration:this.calibration,events:this.events,samples:this.samples,reason:this.reason}}
 }
-if(typeof module!=='undefined'&&module.exports)module.exports={Q,MadgwickAHRS,SensorFusion,DistanceProcessor,StationaryMatcher,DiagnosticRecorder};
+if(typeof module!=='undefined'&&module.exports)module.exports={Q,MadgwickAHRS,SensorFusion,DistanceProcessor,LegacyDistanceProcessor,StationaryMatcher,DiagnosticRecorder};
 </script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),C=$('plane'),G=$('graph'),ctx=C.getContext('2d'),gc=G.getContext('2d');
-const fusion=new SensorFusion(),motion=new DistanceProcessor(),matcher=new StationaryMatcher(),recorder=new DiagnosticRecorder();
+const fusion=new SensorFusion(),motion=new DistanceProcessor(),rawMotion=new DistanceProcessor(),legacy=new LegacyDistanceProcessor(),matcher=new StationaryMatcher(),recorder=new DiagnosticRecorder();
 const defaults={mode:'INTEGRATED',scale:2500,gain:100,dead:6,smooth:14,friction:80,stationary:12,hold:50,beta:10,match:35,auto:true,native:true,invertX:false,invertY:true};
 const state={active:false,anchor:null,cal:null,pos:[0,0],cam:[0,0],trail:[],lastEvent:null,accXY:[0,0],latestRaw:null,latestGyro:null,shift:[0,0],sim:[0,0],simTime:null,calSamples:0,fixCount:0,statusStamp:0,history:[],touch:null,autoTest:null,input:'なし'};
 try{const settings=JSON.parse(localStorage.getItem('sensorMouse-v4')||'{}');for(const k in defaults){if(typeof settings[k]===typeof defaults[k]){if(typeof defaults[k]==='boolean')$(k).checked=settings[k];else $(k).value=settings[k]}else if(typeof defaults[k]==='boolean')$(k).checked=defaults[k];else $(k).value=defaults[k]}}
@@ -225,7 +258,7 @@ catch{for(const k in defaults){if(typeof defaults[k]==='boolean')$(k).checked=de
 function settings(){return {mode:$('mode').value,scale:+$('scale').value,gain:+$('gain').value/100, directGain:(+$('gain').value/100)*100,dead:+$('dead').value/100,smooth:+$('smooth').value,friction:+$('friction').value/100,stationary:+$('stationary').value/100,hold:+$('hold').value/100,match:+$('match').value/100,auto:$('auto').checked,native:$('native').checked,invertX:$('invertX').checked,invertY:$('invertY').checked}}
 function label(){for(const [k,fmt] of Object.entries({scale:v=>v+' px/m',gain:v=>v+'%',dead:v=>(v/100).toFixed(2)+' m/s²',smooth:v=>v+' Hz',friction:v=>(v/100).toFixed(2)+' /s',stationary:v=>(v/100).toFixed(2)+' m/s²',hold:v=>(v/100).toFixed(2)+' s',beta:v=>(v/100).toFixed(2),match:v=>(v/100).toFixed(2)+' m/s²'}))$(k+'V').textContent=fmt(+$(k).value)}
 function persist(){if(recorder.active)traceEvent('settings_changed',{settings:settings()});const o={};for(const k in defaults)o[k]=typeof defaults[k]==='boolean'?$(k).checked:typeof defaults[k]==='number'?+$(k).value:$(k).value;try{localStorage.setItem('sensorMouse-v4',JSON.stringify(o))}catch{}}
-for(const k in defaults)$(k).addEventListener('input',()=>{label();persist();fusion.filter.beta=+$('beta').value/100;if(k==='mode')motion.resetVelocity()});label();fusion.filter.beta=+$('beta').value/100;
+for(const k in defaults)$(k).addEventListener('input',()=>{label();persist();fusion.filter.beta=+$('beta').value/100;if(k==='mode'){state.trail=[];state.pos=(settings().mode==='INTEGRATED'?motion.x:legacy.x).slice()}});label();fusion.filter.beta=+$('beta').value/100;
 function status(s,warn=false){$('status').textContent=s;$('status').className='stat'+(warn?' warning':'')}
 function log(s){const a=new Date();$('log').textContent=a.toLocaleTimeString()+' '+s+'\n'+$('log').textContent.slice(0,800)}
 const readVector=v=>v&&v.length===3?v:[null,null,null];
@@ -241,7 +274,7 @@ $('recordStart').onclick=()=>{recorder.start(performance.now(),settings(),matche
 $('recordStop').onclick=()=>{recorder.stop(performance.now());displayRecording();log('内部データ記録を停止');};
 $('recordClear').onclick=()=>{recorder.reset();displayRecording();$('trialResult').textContent='記録を破棄しました。';log('内部データを破棄');};
 // CSV contains scalar data only. JSON additionally preserves calibration profiles and event metadata.
-const csvColumns=['t_ms','kind','phase','source','interval_ms','raw_a_x','raw_a_y','raw_a_z','gyro_x','gyro_y','gyro_z','native_a_x','native_a_y','native_a_z','predicted_a_x','predicted_a_y','predicted_a_z','linear_a_x','linear_a_y','linear_a_z','q_w','q_x','q_y','q_z','anchor_a_x','anchor_a_y','anchor_a_z','corrected_x','corrected_y','shift_x','shift_y','acc_match_error','gyro_match_error','matched','auto_corrected','stationary','delta_x','delta_y','velocity_x','velocity_y','pos_x','pos_y','dt_s','beta','gain','scale','dead','friction','mode','event','detail'];
+const csvColumns=['phys_dv_x','phys_dv_y','phys_velocity_x','phys_velocity_y','phys_pos_x','phys_pos_y','uncorrected_velocity_x','uncorrected_velocity_y','uncorrected_pos_x','uncorrected_pos_y','legacy_velocity_x','legacy_velocity_y','legacy_pos_x','legacy_pos_y','zupt_active','integrator_gap', 't_ms','kind','phase','source','interval_ms','raw_a_x','raw_a_y','raw_a_z','gyro_x','gyro_y','gyro_z','native_a_x','native_a_y','native_a_z','predicted_a_x','predicted_a_y','predicted_a_z','linear_a_x','linear_a_y','linear_a_z','q_w','q_x','q_y','q_z','anchor_a_x','anchor_a_y','anchor_a_z','corrected_x','corrected_y','shift_x','shift_y','acc_match_error','gyro_match_error','matched','auto_corrected','stationary','delta_x','delta_y','velocity_x','velocity_y','pos_x','pos_y','dt_s','beta','gain','scale','dead','friction','mode','event','detail'];
 function csvSafe(v){if(v===undefined||v===null)return '';if(typeof v==='boolean')return v?'1':'0';const s=String(v);if(typeof v==='string'&&/^[=+@\t\r]/.test(s))return '"'+("'"+s).replace(/"/g,'""')+'"';return '"'+s.replace(/"/g,'""')+'"';}
 function downloadFile(content,name,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
 function sessionName(ext){const date=new Date(recorder.startedWallMs||Date.now()).toISOString().replace(/[:.]/g,'-');return 'sensor-mouse-diagnostics-'+date+'.'+ext}
@@ -264,14 +297,14 @@ function markTrial(name){const t=performance.now(),pos=state.pos.slice();traceEv
 $('trialStart').onclick=()=>markTrial('motion_start');$('trialTurn').onclick=()=>markTrial('motion_turn');$('trialEnd').onclick=()=>markTrial('motion_end');
 displayRecording();
 
-function reorigin(){traceEvent('origin_reset');motion.reset();state.pos=[0,0];state.cam=[0,0];state.trail=[];status('座標を原点に戻しました。初期補正の姿勢基準は維持します。')}
-function fullReset(){fusion.reset();motion.reset();matcher.reset();state.anchor=null;state.cal=null;state.pos=[0,0];state.cam=[0,0];state.trail=[];state.shift=[0,0];state.latestRaw=null;state.latestGyro=null;state.lastEvent=null;state.accXY=[0,0];$('calStatus').textContent='初回補正が必要です。';$('autoLabel').textContent='自動補正：未設定';}
-function startCalibration(){if(!state.active){status('まずセンサーを開始してください。',true);return}traceEvent('calibration_start');state.cal={start:performance.now(),a:[],g:[]};state.anchor=null;motion.resetVelocity();status('初回補正中：端末を約1.3秒、静止させてください。');}
+function reorigin(){traceEvent('origin_reset');motion.reset();rawMotion.reset();legacy.reset();state.pos=[0,0];state.cam=[0,0];state.trail=[];status('座標を原点に戻しました。初期補正の姿勢基準は維持します。')}
+function fullReset(){fusion.reset();motion.reset();rawMotion.reset();legacy.reset();matcher.reset();state.anchor=null;state.cal=null;state.pos=[0,0];state.cam=[0,0];state.trail=[];state.shift=[0,0];state.latestRaw=null;state.latestGyro=null;state.lastEvent=null;state.accXY=[0,0];$('calStatus').textContent='初回補正が必要です。';$('autoLabel').textContent='自動補正：未設定';}
+function startCalibration(){if(!state.active){status('まずセンサーを開始してください。',true);return}traceEvent('calibration_start');state.cal={start:performance.now(),a:[],g:[]};state.anchor=null;motion.resetVelocity();rawMotion.resetVelocity();legacy.resetVelocity();status('初回補正中：端末を約1.3秒、静止させてください。');}
 function finishCalibration(){const cal=state.cal;if(!cal)return;
  if(cal.a.length<12||cal.g.length<12){status('補正失敗：未加工データのサンプルが不足しています。',true);state.cal=null;traceEvent('calibration_failed',{reason:'insufficient_samples'});return}
  const ref=matcher.setReference(cal.a,cal.g);const gm=Vec3.norm(ref.acc);
  if(ref.accNoise>.4||ref.gyroNoise>.12||Vec3.norm(ref.gyro)>.35||Math.abs(gm-9.80665)>1.4){status('補正失敗：静止状態が安定しないか重力値が不適切です。やり直してください。',true);matcher.reset();state.cal=null;traceEvent('calibration_failed',{reason:'unstable_samples'});return}
- fusion.anchor(ref.acc,ref.gyro);fusion.filter.beta=+$('beta').value/100;state.anchor=fusion.filter.q.slice();state.shift=[0,0];motion.resetVelocity();state.cal=null;state.fixCount=0;recorder.setCalibration(ref);traceEvent('calibration_complete',{sample_count:ref.sampleCount,acc_noise:ref.accNoise,gyro_noise:ref.gyroNoise});
+ fusion.anchor(ref.acc,ref.gyro);fusion.filter.beta=+$('beta').value/100;state.anchor=fusion.filter.q.slice();state.shift=[0,0];motion.reset();rawMotion.reset();legacy.reset();state.pos=[0,0];state.trail=[];state.cal=null;state.fixCount=0;recorder.setCalibration(ref);traceEvent('calibration_complete',{sample_count:ref.sampleCount,acc_noise:ref.accNoise,gyro_noise:ref.gyroNoise});
  const msg='補正完了：'+ref.sampleCount+'点、加速度雑音 '+ref.accNoise.toFixed(3)+'m/s²、角速度雑音 '+ref.gyroNoise.toFixed(4)+'rad/s。';$('calStatus').textContent=msg;status('初期平面を固定しました。加工前の静止パターンと一致すると自動補正します。');log(msg);
 }
 function processInput(t,raw,gyro,nativeLinear=null){
@@ -284,17 +317,23 @@ function processInput(t,raw,gyro,nativeLinear=null){
  let match={matched:false,correction:false};const cfg=settings();
  if(cfg.auto){match=matcher.observe(t,raw,gyro,true,cfg.match);if(match.correction){
  // Zero velocity only; never overwrite the anchor orientation or already accumulated position.
- motion.resetVelocity();
+ motion.resetVelocity();legacy.resetVelocity();
  for(let k=0;k<3;k++)fusion.bias[k]=.98*fusion.bias[k]+.02*match.avgGyro[k];
  for(let k=0;k<2;k++)state.shift[k]=Math.max(-.35,Math.min(.35,.985*state.shift[k]+.015*vector[k]));
  state.fixCount++;if(state.fixCount===1||state.fixCount%20===0)log('静止パターン一致：ZUPT / バイアス微調整 ('+state.fixCount+'回)');
  }}
- const out=motion.update(t,current,cfg,match.matched);state.pos=motion.x.slice();state.accXY=current;
+ // Three independent tracks from EXACTLY the same corrected sensor vector:
+ // 1) physics + explicit ZUPT, 2) untouched physics, 3) previous damped system.
+ const uncorrected=rawMotion.update(t,current,cfg,false);
+ const out=motion.update(t,current,cfg,cfg.auto&&match.matched);
+ const oldCfg={...cfg,mode:cfg.mode==='DIRECT'?'DIRECT':'INTEGRATED'};
+ const old=legacy.update(t,current,oldCfg,cfg.auto&&match.matched);
+ state.pos=(cfg.mode==='INTEGRATED'?motion.x:legacy.x).slice();state.accXY=current;
  state.history.push(current);if(state.history.length>160)state.history.shift();
  if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}
  $('autoLabel').textContent=cfg.auto?(match.matched?'自動補正：静止一致 ('+state.fixCount+')':'自動補正：監視中'):'自動補正：OFF';
  state.input=(nativeLinear&&cfg.native)?'OS重力補正 + IMU回転':'Madgwick重力補正 + IMU回転';
- return {result,vector,current,match,out,cfg};
+ return {result,vector,current,match,out,uncorrected,old,cfg};
 }
 function onMotion(e){if(!state.active)return;const t=performance.now();
  const a=e.accelerationIncludingGravity,rot=e.rotationRate,lin=e.acceleration;
@@ -314,8 +353,13 @@ function onMotion(e){if(!state.active)return;const t=performance.now();
    corrected_x:diag?.current[0],corrected_y:diag?.current[1],
    shift_x:state.shift[0],shift_y:state.shift[1],
    acc_match_error:match?.accErr,gyro_match_error:match?.gyroErr,matched:match?.matched??false,auto_corrected:match?.correction??false,
-   stationary:diag?.out.stationary,delta_x:diag?.out.delta[0],delta_y:diag?.out.delta[1],velocity_x:motion.v[0],velocity_y:motion.v[1],
+   stationary:diag?.out.stationary,delta_x:diag?.out.delta[0],delta_y:diag?.out.delta[1],velocity_x:(cfg?.mode==='INTEGRATED'?motion.v[0]:legacy.v[0]),velocity_y:(cfg?.mode==='INTEGRATED'?motion.v[1]:legacy.v[1]),
    pos_x:state.pos[0],pos_y:state.pos[1],dt_s:res?.dt,beta:fusion.filter.beta,
+   phys_dv_x:diag?.out.dv[0],phys_dv_y:diag?.out.dv[1],
+   phys_velocity_x:motion.v[0],phys_velocity_y:motion.v[1],phys_pos_x:motion.x[0],phys_pos_y:motion.x[1],
+   uncorrected_velocity_x:rawMotion.v[0],uncorrected_velocity_y:rawMotion.v[1],uncorrected_pos_x:rawMotion.x[0],uncorrected_pos_y:rawMotion.x[1],
+   legacy_velocity_x:legacy.v[0],legacy_velocity_y:legacy.v[1],legacy_pos_x:legacy.x[0],legacy_pos_y:legacy.x[1],
+   zupt_active:match?.matched??false,integrator_gap:!!diag?.out.gapReset,
    gain:cfg?.gain,scale:cfg?.scale,dead:cfg?.dead,friction:cfg?.friction,mode:cfg?.mode};
   recorder.append(t,row);
  }
@@ -325,7 +369,7 @@ async function start(){if(!window.isSecureContext){status('HTTPSかlocalhostが�
  try{if(typeof DeviceMotionEvent.requestPermission==='function'){const p=await DeviceMotionEvent.requestPermission();if(p!=='granted')throw Error('センサー権限が拒否されました')}
  if(state.active)return;fullReset();state.active=true;window.addEventListener('devicemotion',onMotion);status('センサー開始。端末を静止させて「初回補正」を押してください。')}
  catch(e){status('開始できません：'+e.message,true)}}
-function stop(){state.active=false;window.removeEventListener('devicemotion',onMotion);state.cal=null;motion.resetVelocity();status('センサー停止中。模擬入力は可能です。')}
+function stop(){state.active=false;window.removeEventListener('devicemotion',onMotion);state.cal=null;motion.resetVelocity();rawMotion.resetVelocity();legacy.resetVelocity();status('センサー停止中。模擬入力は可能です。')}
 $('start').onclick=start;$('stop').onclick=stop;$('calibrate').onclick=startCalibration;$('center').onclick=()=>{state.cam=state.pos.slice()};$('origin').onclick=reorigin;
 $('resetFilter').onclick=()=>{traceEvent('filter_reset');fullReset();status('姿勢推定を初期化しました。再度、初回補正してください。')};
 $('clearTrail').onclick=()=>{state.trail=[];log('軌跡を消去しました。')};
@@ -336,8 +380,7 @@ $('testPulse').onclick=()=>{traceEvent('simulated_round_trip');state.autoTest={s
 function sampleSim(now,dt){let x=(dirs.has('right')?1:0)-(dirs.has('left')?1:0),y=(dirs.has('down')?1:0)-(dirs.has('up')?1:0);
  let g=0;if(state.autoTest){const sec=(now-state.autoTest.start)/1000;if(sec>=2.0)state.autoTest=null;else g=sec<1?1:-1}
  x=x*1.5+g*1.2;y=y*1.5;
- if(x||y){const cfg=settings(),current=[x,y];const o=motion.update(now,current,cfg,false);state.pos=motion.x.slice();state.accXY=current;state.history.push(current);if(state.history.length>160)state.history.shift();if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}state.input='模擬加速度';if(recorder.active)recorder.append(now,{phase:'simulated',source:'simulated',corrected_x:x,corrected_y:y,delta_x:o.delta[0],delta_y:o.delta[1],pos_x:state.pos[0],pos_y:state.pos[1],velocity_x:motion.v[0],velocity_y:motion.v[1],mode:cfg.mode,gain:cfg.gain,scale:cfg.scale});}
- else if(!state.active&&motion.last!==null){motion.update(now,[0,0],settings(),false);state.pos=motion.x.slice()}
+ if(x||y||(!state.active&&motion.last!==null)){const cfg=settings(),current=[x,y];rawMotion.update(now,current,cfg,false);const o=motion.update(now,current,cfg,false);legacy.update(now,current,{...cfg,mode:cfg.mode==='DIRECT'?'DIRECT':'INTEGRATED'},false);state.pos=(cfg.mode==='INTEGRATED'?motion.x:legacy.x).slice();state.accXY=current;state.history.push(current);if(state.history.length>160)state.history.shift();if(state.trail.length===0||Math.hypot(...Vec3.sub(state.pos,state.trail[state.trail.length-1]))>.0003){state.trail.push(state.pos.slice());if(state.trail.length>800)state.trail.shift()}state.input='模擬加速度';if(recorder.active)recorder.append(now,{phase:'simulated',source:'simulated',corrected_x:x,corrected_y:y,delta_x:o.delta[0],delta_y:o.delta[1],pos_x:state.pos[0],pos_y:state.pos[1],velocity_x:motion.v[0],velocity_y:motion.v[1],phys_velocity_x:motion.v[0],phys_velocity_y:motion.v[1],uncorrected_velocity_x:rawMotion.v[0],uncorrected_velocity_y:rawMotion.v[1],legacy_velocity_x:legacy.v[0],legacy_velocity_y:legacy.v[1],mode:cfg.mode,gain:cfg.gain,scale:cfg.scale});}
 }
 function canvasReady(cv,c){const rect=cv.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2.5);const w=Math.max(1,rect.width),h=Math.max(1,rect.height);const pw=Math.round(w*dpr),ph=Math.round(h*dpr);if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph}c.setTransform(dpr,0,0,dpr,0,0);return {w,h};}
 function point(c,x,y,r,color){c.fillStyle=color;c.beginPath();c.arc(x,y,r,0,2*Math.PI);c.fill()}
@@ -358,11 +401,12 @@ function drawPlane(){const {w,h}=canvasReady(C,ctx);ctx.fillStyle='#081727';ctx.
 }
 function drawGraph(){const {w,h}=canvasReady(G,gc);gc.clearRect(0,0,w,h);gc.strokeStyle='#415371';gc.beginPath();gc.moveTo(0,h/2);gc.lineTo(w,h/2);gc.stroke();for(const [idx,col] of [[0,'#73ead5'],[1,'#f5b477']]){gc.strokeStyle=col;gc.lineWidth=1.7;gc.beginPath();state.history.forEach((p,i)=>{const x=i/159*w,y=Math.min(h-2,Math.max(2,h/2-p[idx]*23));if(i===0)gc.moveTo(x,y);else gc.lineTo(x,y)});gc.stroke()}}
 let frameTime=performance.now(),frameCount=0;function frame(now){const dt=Math.min(.05,Math.max(.001,(now-frameTime)/1000));frameTime=now;
- if(dirs.size||state.autoTest)sampleSim(now,dt);
+ if(dirs.size||state.autoTest||(!state.active&&motion.last!==null))sampleSim(now,dt);
  drawPlane();if((frameCount++%3)===0)drawGraph();if(frameCount%35===0)displayRecording();
  $('coordX').textContent=(state.pos[0]*100).toFixed(1);$('coordY').textContent=(state.pos[1]*100).toFixed(1);
- $('speed').textContent=settings().mode==='INTEGRATED'?(Math.hypot(...motion.v)*100).toFixed(1):'—';
+ $('speed').textContent=(Math.hypot(...(settings().mode==='INTEGRATED'?motion.v:legacy.v))*100).toFixed(1);
  $('displayPx').textContent=(Math.hypot(...state.pos)*settings().scale).toFixed(0);
+ $('rawSpeed').textContent=(Math.hypot(...rawMotion.v)*100).toFixed(1);$('legacySpeed').textContent=(Math.hypot(...legacy.v)*100).toFixed(1);$('rawCoord').textContent=rawMotion.x.map(v=>(v*100).toFixed(1)).join(', ');
  $('ax').textContent=state.accXY[0].toFixed(2);$('ay').textContent=state.accXY[1].toFixed(2);$('inputLabel').textContent='入力：'+state.input;
  requestAnimationFrame(frame)}requestAnimationFrame(frame);
  document.addEventListener('visibilitychange',()=>{if(document.hidden){if(recorder.active){recorder.stop(performance.now(),'page_hidden');displayRecording()}stop()}});
