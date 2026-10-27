@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0a1424">
-<title>Sensor Mouse Lab v8 — Motion Graphs</title>
+<title>Sensor Mouse Lab v9 — Motion Graphs</title>
 <link rel="stylesheet" href="./css/styles.css">
 <script type="module" src="./src/app.js"></script>
 </head>
 <body>
-<header class="sitehead"><div class="eyebrow">SENSOR MOUSE LAB · v8</div><h1>動きの推定を、検証可能に。</h1><p>センサー取得・姿勢推定・平面変換・積分・静止補正を独立させた実験用アプリ。PCのマウスポインターはまだ操作しません。</p></header>
+<header class="sitehead"><div class="eyebrow">SENSOR MOUSE LAB · v9</div><h1>動きの推定を、検証可能に。</h1><p>センサー取得・姿勢推定・平面変換・積分・静止補正を独立させた実験用アプリ。PCのマウスポインターはまだ操作しません。</p></header>
 <main class="layout">
 <div class="stack">
 <section class="panel">
@@ -37,6 +37,19 @@
 <div class="graphCard"><canvas id="velocityGraph" class="timeGraph" aria-label="速度の時間グラフ"></canvas></div>
 <div class="hint" id="graphInfo" aria-live="polite">センサー取得、模擬運動、またはCSV再生でグラフを表示します。</div>
 <p class="hint">軌跡と同じ系列を表示します。横軸は開始からの秒数。マウスやタッチでグラフの時刻を確認できます。加速度の符号と速度の変化が一致するか観察してください。</p>
+</section>
+<section class="panel" id="gravityComparison">
+<div class="titlebar"><h2>3方式・重力補正比較</h2><span class="chip">診断のみ / ZUPTなし / 3軸</span></div>
+<p>固定重力 A、ジャイロ推定重力 B、OS加速度 C を同時刻で比較。固定方式の基準は「端末座標」、姿勢変換の有無を独立に変更できます。各方式の欠測は補完しません。</p>
+<div class="actions graphControls">
+<label>成分<select id="compareAxis"><option value="0">X</option><option value="1" selected>Y</option><option value="2">Z</option></select></label>
+<label>量<select id="compareQuantity"><option value="raw">重力込み</option><option value="gravity">重力推定</option><option value="device">除去後・端末座標</option><option value="initial">除去後・初期座標</option><option value="velocity" selected>速度</option><option value="position">変位</option></select></label>
+<label>積分座標<select id="compareFrame"><option value="device" selected>端末座標</option><option value="initial">初期座標</option></select></label>
+<label>時間窓<select id="compareWindow"><option value="5">5秒</option><option value="15" selected>15秒</option><option value="30">30秒</option><option value="all">全履歴</option></select></label>
+</div><p class="hint">固定：橙 ／ 動的：緑 ／ OS：青。縦軸は選択した物理量、横軸は時間。ゼロ基準線を表示。</p>
+<div class="graphCard"><canvas id="comparisonCanvas" class="timeGraph" aria-label="3方式比較"></canvas></div>
+<p id="compareSummary" class="hint">補正完了後に表示します。</p>
+<div class="actions"><button id="compareCsv">比較CSV保存</button><button id="compareJson">比較JSON保存</button></div>
 </section>
 <section class="panel">
 <div class="titlebar"><h2>診断データ</h2><span class="chip">端末内のみ</span></div>

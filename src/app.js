@@ -1,9 +1,13 @@
+import {GravityComparison,flattenComparison} from './comparison.js';
+import {createComparisonUI} from './comparison-ui.js';
 import {MotionPipeline,parseMotionEvent} from './pipeline.js';
 import {Recorder,parseCsv,replayRows,exportCsv,download} from './diagnostics.js';
 import {TrackPair} from './integration.js';
 import {Plotter} from './visualization.js';
 import {MotionHistory,liveGraphFrame,graphSeries} from './timeseries.js';
 import {TimeChart} from './charts.js';
+const comparison=new GravityComparison();
+const comparisonUI=createComparisonUI(comparison);
 const $=id=>document.getElementById(id),engine=new MotionPipeline(),recorder=new Recorder(),plot=new Plotter($('plane'));
 const history=new MotionHistory(),accChart=new TimeChart($('accGraph'),{title:'平面加速度',unit:'m/s²',key:'acc'}),velChart=new TimeChart($('velocityGraph'),{title:'推定速度',unit:'cm/s',key:'velocity'});
 const tracks=['native_free','native_constrained','estimated_free','estimated_constrained'];
@@ -18,7 +22,7 @@ function addOutput(f){if(!f||f.phase!=='operating')return;lastOutput=f;history.a
  for(const src of ['native','estimated'])for(const mode of ['free','constrained']){const p=f.tracks[src][mode],key=src+'_'+mode;if(src==='native'&&!f.anchoredNative)continue;let path=paths[key];if(!path.length||Math.hypot(p.x[0]-path.at(-1)[0],p.x[1]-path.at(-1)[1])>.00007){path.push(p.x.slice());if(path.length>1200)path.shift()}}
 }
 let lastGraphRendered=0;
-function drawGraphs(){
+function drawGraphs(){comparisonUI.draw();
  const source=currentSource==='replay'?'replay':'live';const dataset=source==='replay'?replayHistory:history;
  const graph=graphSeries(dataset,{context:source,track:settings().track,axis:$('graphAxis').value,windowSeconds:$('graphWindow').value,replayTrack:$('graphReplayTrack').value,overlayFree:$('graphComparison').checked});
  accChart.setData(graph);velChart.setData(graph);
@@ -39,21 +43,22 @@ let lastRendered=0;function updateFrame(t=now()){if(t-lastRendered<32){requestAn
  requestAnimationFrame(updateFrame)}
 requestAnimationFrame(updateFrame);
 function handleMotion(e){if(!sensorActive)return;const t=now(),sample=parseMotionEvent(e,t);const output=engine.consume(sample,settings());
- recorder.add(t,sample,output);if(output?.phase==='operating'){currentSource='live';addOutput(output);if(!output.anchoredNative&&output.t<2000){status('OSの重力除去済み加速度が取得できないため、独自推定を表示します。',true)}}
+ const diagnostic=comparison.reference?comparison.update(sample,output?.phase==='operating'?output.q:null):null;
+ recorder.add(t,sample,output,diagnostic);if(output?.phase==='operating'){currentSource='live';addOutput(output);if(!output.anchoredNative&&output.t<2000){status('OSの重力除去済み加速度が取得できないため、独自推定を表示します。',true)}}
  if(output?.phase==='calibrated'){
-  recorder.calibration=engine.detector.ref;recorder.mark(t,'calibration_done',{ref:engine.detector.ref});
+  comparison.calibrate(engine.detector.ref.raw);recorder.calibration=engine.detector.ref;recorder.mark(t,'calibration_done',{ref:engine.detector.ref});
   $('calInfo').textContent=`補正完了：${engine.detector.ref.count}件 / 加速度標準偏差 ${engine.detector.ref.noiseA.toFixed(3)} m/s² / 角速度標準偏差 ${engine.detector.ref.noiseG.toFixed(4)} rad/s`;
   status('静止補正が完了しました。移動を開始できます。')
  }else if(output?.phase==='calibration_failed'){recorder.mark(t,'calibration_failed',{reason:output.message});status(output.message,true)}
  if(t-lastRecordUi>250){recordingStatus();lastRecordUi=t}}
 async function startSensor(){if(sensorActive)return;if(!window.isSecureContext){status('HTTPSまたはlocalhostで開いてください',true);return}if(typeof DeviceMotionEvent==='undefined'){status('このブラウザはDeviceMotionEventに非対応です',true);return}
  try{if(typeof DeviceMotionEvent.requestPermission==='function'){const granted=await DeviceMotionEvent.requestPermission();if(granted!=='granted')throw Error('センサー許可が得られませんでした')}
-  sensorActive=true;engine.reset();clearPaths();currentSource='live';window.addEventListener('devicemotion',handleMotion);status('センサー取得中。動かさず「静止補正」を押してください。');}
+  sensorActive=true;engine.reset();comparison.reset();clearPaths();currentSource='live';window.addEventListener('devicemotion',handleMotion);status('センサー取得中。動かさず「静止補正」を押してください。');}
  catch(e){status(`センサー開始失敗：${e.message}`,true)}}
 function stopSensor(){sensorActive=false;window.removeEventListener('devicemotion',handleMotion);status('センサー停止。記録は保持されています。')}
 $('sensorStart').onclick=startSensor;$('sensorStop').onclick=stopSensor;
-$('calibrate').onclick=()=>{if(!sensorActive){status('先にセンサーを開始してください',true);return}const t=now();engine.beginCalibration(t);clearPaths();currentSource='live';recorder.mark(t,'calibration_start');status('約1.2秒間静止させてください。')};
-$('reset').onclick=()=>{engine.reset();clearPaths();currentSource='live';recorder.mark(now(),'reset');status('座標・補正状態をリセットしました。再補正してください。')};
+$('calibrate').onclick=()=>{if(!sensorActive){status('先にセンサーを開始してください',true);return}const t=now();engine.beginCalibration(t);comparison.reset();clearPaths();currentSource='live';recorder.mark(t,'calibration_start');status('約1.2秒間静止させてください。')};
+$('reset').onclick=()=>{engine.reset();comparison.reset();clearPaths();currentSource='live';recorder.mark(now(),'reset');status('座標・補正状態をリセットしました。再補正してください。')};
 $('center').onclick=()=>{const rows=displayTracks().main;plot.center(rows.at(-1)||[0,0])};$('clearTrace').onclick=()=>{clearPaths();if(replayed)replayed.paths={event:[],nominal:[],constrained:[]};recorder.mark(now(),'trace_cleared')};
 $('recordStart').onclick=()=>{recorder.start(now(),settings());recorder.calibration=engine.detector.ref;recordingStatus()};$('recordStop').onclick=()=>{recorder.stop(now());recordingStatus()};$('discard').onclick=()=>{recorder.clear();recordingStatus()};
 $('csv').onclick=()=>download(exportCsv(recorder.snapshot()),`sensor-mouse-v7-${Date.now()}.csv`,'text/csv;charset=utf-8');
