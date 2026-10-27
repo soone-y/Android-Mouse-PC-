@@ -37,7 +37,7 @@ export function replayRows(rows,{source='anchor',applyZupt=true}={}){
  const samples=rows.filter(r=>(!r.kind||r.kind==='sample')&&num(r,'t_ms')!==null);
  const chosen=candidates.find(keys=>samples.some(r=>keys.every(k=>num(r,k)!==null)));
  if(!chosen)throw Error('再生に必要な補正済み平面加速度の列がありません');
- const a=new TrackPair(),b=new TrackPair();let nominal=0,last=null,applied=0,gap=0;const paths={event:[],nominal:[],constrained:[]};
+ const a=new TrackPair(),b=new TrackPair();let nominal=0,last=null,applied=0,gap=0;const paths={event:[],nominal:[],constrained:[]},graphRows=[];
  for(const row of samples){const acceleration=chosen.map(k=>num(row,k));if(acceleration.some(v=>v===null))continue;
   const t=num(row,'t_ms');const interval=num(row,'interval_ms');
   if(last!==null){nominal+=interval&&interval>0&&interval<=100?interval:t-last}
@@ -45,9 +45,9 @@ export function replayRows(rows,{source='anchor',applyZupt=true}={}){
   const first=a.update(t,acceleration,stationary),second=b.update(nominal,acceleration,false);
   if(first.free.reason==='time_gap'||second.free.reason==='time_gap')gap++;
   if(stationary)applied++;
-  paths.event.push(a.free.x.slice());paths.nominal.push(b.free.x.slice());paths.constrained.push(a.constrained.x.slice());last=t;
+  paths.event.push(a.free.x.slice());paths.nominal.push(b.free.x.slice());paths.constrained.push(a.constrained.x.slice());graphRows.push({t,acc:acceleration.slice(),eventV:a.free.v.slice(),nominalV:b.free.v.slice(),constrainedV:a.constrained.v.slice()});last=t;
  }
  const stats=p=>({position:p.x.slice(),velocity:p.v.slice(),gaps:p.gaps});
- return {columns:chosen,samples:paths.event.length,applied,gap,paths,event:stats(a.free),nominal:stats(b.free),constrained:stats(a.constrained),note:source==='processed'?'旧版corrected列は積分前の自動バイアス補正を含む場合があります。':'anchor列を優先し、旧版の加速度シフトを可能な範囲で除外しています。'};
+ return {columns:chosen,samples:paths.event.length,applied,gap,paths,graphRows,event:stats(a.free),nominal:stats(b.free),constrained:stats(a.constrained),note:source==='processed'?'旧版corrected列は積分前の自動バイアス補正を含む場合があります。':'anchor列を優先し、旧版の加速度シフトを可能な範囲で除外しています。'};
 }
 export function download(data,name,type){const url=URL.createObjectURL(new Blob([data],{type}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1500)}
