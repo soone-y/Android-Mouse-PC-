@@ -1,25 +1,39 @@
-import {G,V,varianceNorm3} from './math.js';
-/** Evidence-based but not proof of rest: compares sensor data with reference, checks stability.
- * Constant velocity is observationally indistinguishable from rest with IMU alone.
- */
-export class StationaryDetector{
- constructor(){this.clear()}
- clear(){this.ref=null;this.window=[];this.since=null;this.active=false}
- setReference(samples){const raw=samples.map(s=>s.raw).filter(V.valid),gyro=samples.map(s=>s.gyro).filter(V.valid);
-  if(raw.length<15||gyro.length!==raw.length)throw Error('初期静止サンプルが不足しています');
-  const ra=V.mean(raw),rg=V.mean(gyro);const noiseA=Math.sqrt(varianceNorm3(raw,ra)),noiseG=Math.sqrt(varianceNorm3(gyro,rg));
-  if(noiseA>.7||noiseG>.15||V.norm(rg)>.15||Math.abs(V.norm(ra)-G)>1)throw Error('初期補正中に端末が動いているか、重力値が不適切です。静止させてやり直してください');
-  this.clear();this.ref={raw:ra,gyro:rg,noiseA,noiseG,count:raw.length};return this.ref;
- }
- observe(s,threshold=.35){if(!this.ref||!V.valid(s.raw)||!V.valid(s.gyro))return {matched:false,reason:'no_reference'};
-  this.window.push(s);while(this.window.length&&this.window[0].t<s.t-350)this.window.shift();
-  const errA=V.norm(V.sub(s.raw,this.ref.raw)),errG=V.norm(V.sub(s.gyro,this.ref.gyro));
-  const pass=errA<threshold&&errG<.1;
-  if(!pass){this.since=null;this.active=false;return {matched:false,errA,errG}}
-  if(this.since===null)this.since=s.t;
-  const raw=this.window.map(x=>x.raw),gyro=this.window.map(x=>x.gyro);
-  const stdA=Math.sqrt(varianceNorm3(raw)),stdG=Math.sqrt(varianceNorm3(gyro));
-  this.active=s.t-this.since>=450&&this.window.length>=12&&stdA<Math.max(.12,2*this.ref.noiseA+.07)&&stdG<Math.max(.04,2*this.ref.noiseG+.025);
-  return {matched:this.active,errA,errG,stdA,stdG};
- }
+import {V,G} from './math.js';
+// 'quiet' is only an IMU-based hypothesis, NOT proof of zero ground speed.
+// No comparison to initial orientation; a stationary phone can rest at ANY tilt.
+export class QuietDetector {
+  constructor(){this.reset()}
+  reset(){this.samples=[];this.since=null;this.quiet=false;this.reason='insufficient_data';this.previousT=null}
+  update(s,gravityMagnitude=G,gyroBias=[0,0,0]){
+    if(!V.valid(s.raw)||!V.valid(s.gyro)){
+      this.reset();return this.snapshot(false,'missing_data');
+    }
+    if(this.previousT!==null && (s.t<=this.previousT || s.t-this.previousT>140))this.reset();
+    this.previousT=s.t;
+    this.samples.push({t:s.t,raw:s.raw.slice(),gyro:V.sub(s.gyro,gyroBias),native:V.valid(s.native)?s.native.slice():null});
+    while(this.samples.length && this.samples[0].t<s.t-650)this.samples.shift();
+    const recent=this.samples.filter(x=>x.t>=s.t-300);
+    if(recent.length<8 || recent.at(-1).t-recent[0].t<160)return this.snapshot(false,'insufficient_window');
+    const meanRaw=V.mean(recent.map(x=>x.raw)),meanGyro=V.mean(recent.map(x=>x.gyro));
+    const accelScatter=V.rmsDeviation(recent.map(x=>x.raw),meanRaw);
+    const gyroScatter=V.rmsDeviation(recent.map(x=>x.gyro),meanGyro);
+    const nativeValid=recent.filter(x=>x.native!==null),meanNative=nativeValid.length>=recent.length*.8?V.mean(nativeValid.map(x=>x.native)):null;
+    // Norm-alone is not enough; use temporal stability, low angular rate and (if present) OS linear acceleration.
+    const checks={
+      gravity:Math.abs(V.norm(meanRaw)-gravityMagnitude)<.38,
+      accelStable:accelScatter<.14,
+      gyroStable:gyroScatter<.035,
+      gyroSmall:V.norm(meanGyro)<.07,
+      osQuiet:!meanNative||V.norm(meanNative)<.25,
+    };
+    const pass=Object.values(checks).every(Boolean);
+    if(!pass){this.since=null;this.quiet=false;this.reason=Object.entries(checks).filter(([,ok])=>!ok).map(([k])=>k).join(',');}
+    else{
+      if(this.since===null)this.since=s.t;
+      this.quiet=s.t-this.since>=450;
+      this.reason=this.quiet?'quiet_like':'settling';
+    }
+    return {quiet:this.quiet,pass,reason:this.reason,meanRaw,meanGyro,meanNative,accelScatter,gyroScatter,elapsedMs:this.since===null?0:s.t-this.since};
+  }
+  snapshot(quiet,reason){return {quiet,pass:false,reason,meanRaw:null,meanGyro:null,meanNative:null,accelScatter:null,gyroScatter:null,elapsedMs:0}}
 }

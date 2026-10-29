@@ -1,90 +1,92 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0a1424">
-<title>Sensor Mouse Lab v9 — Motion Graphs</title>
-<link rel="stylesheet" href="./css/styles.css">
-<script type="module" src="./src/app.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101a2b">
+  <title>Sensor Mouse Lab — IMU検証版</title>
+  <link rel="stylesheet" href="./assets/style.css">
+  <script type="module" src="./src/app.js"></script>
 </head>
 <body>
-<header class="sitehead"><div class="eyebrow">SENSOR MOUSE LAB · v9</div><h1>動きの推定を、検証可能に。</h1><p>センサー取得・姿勢推定・平面変換・積分・静止補正を独立させた実験用アプリ。PCのマウスポインターはまだ操作しません。</p></header>
-<main class="layout">
-<div class="stack">
-<section class="panel">
-<div class="titlebar"><h2>操作平面</h2><span class="chip">位置 m / 表示 px を分離</span></div>
-<div class="actions"><button class="primary" id="sensorStart">センサー開始</button><button id="calibrate">静止補正（約1.2秒）</button><button id="sensorStop">センサー停止</button><button id="center">表示を追従</button><button id="reset">座標リセット</button></div>
-<div class="status" id="status" role="status">スマホではHTTPSでページを開き、センサーを開始してください。</div>
-<div class="canvasbox"><canvas id="plane" aria-label="移動推定軌跡"></canvas><span class="canvasNote" id="canvasNote">1 cm補助点・10 cm主点 / 画面ドラッグで移動</span></div>
-<div class="metrics">
-<div class="metric"><strong id="x">0.0</strong><span>X (cm)</span></div><div class="metric"><strong id="y">0.0</strong><span>Y (cm)</span></div><div class="metric"><strong id="speed">0.0</strong><span>速度 (cm/s)</span></div>
-<div class="metric"><strong id="freeSpeed">0.0</strong><span>補正なし速度</span></div><div class="metric"><strong id="acceleration">0.00, 0.00</strong><span>平面加速度 (m/s²)</span></div><div class="metric"><strong id="evidence">—</strong><span>静止一致</span></div>
-</div>
-<div class="actions"><button id="simulate">模擬：進んで停止</button><button id="simulateRound">模擬：往復</button><button id="clearTrace">軌跡消去</button></div>
-<p class="hint">模擬実験はセンサー入力と混在しません。進行方向→減速→停止の試験と、元の座標へ戻る往復試験を分けました。</p>
-</section>
-<section class="panel" id="graphPanel">
-<div class="titlebar"><h2>加速度・速度の時間グラフ</h2><span class="chip">XYを独立表示・端末内処理</span></div>
-<p>上段は初期姿勢に変換した<strong>加速度 (m/s²)</strong>、下段はそれを積分した<strong>速度 (cm/s)</strong>です。負の値や停止直後の残留速度を追跡できます。</p>
-<div class="actions graphControls">
-<label>表示範囲<select id="graphWindow"><option value="5">直近5秒</option><option value="15" selected>直近15秒</option><option value="30">直近30秒</option><option value="all">全期間（保持している分）</option></select></label>
-<label>表示成分<select id="graphAxis"><option value="both">X・Y両方</option><option value="x">Xのみ</option><option value="y">Yのみ</option></select></label>
-<label id="graphReplayOption" hidden>CSVの速度<select id="graphReplayTrack"><option value="event">受信時刻・補正なし</option><option value="constrained">受信時刻・静止補正あり</option><option value="nominal">公称間隔・補正なし</option></select></label>
-<label class="checkInline"><input type="checkbox" id="graphComparison" checked>補正なし速度を破線で比較</label>
-</div>
-<div class="legend"><span><i class="legendX"></i> X</span><span><i class="legendY"></i> Y</span><span><i class="legendCompare"></i> 速度の比較系列（破線）</span></div>
-<div class="graphCard"><canvas id="accGraph" class="timeGraph" aria-label="加速度の時間グラフ"></canvas></div>
-<div class="graphCard"><canvas id="velocityGraph" class="timeGraph" aria-label="速度の時間グラフ"></canvas></div>
-<div class="hint" id="graphInfo" aria-live="polite">センサー取得、模擬運動、またはCSV再生でグラフを表示します。</div>
-<p class="hint">軌跡と同じ系列を表示します。横軸は開始からの秒数。マウスやタッチでグラフの時刻を確認できます。加速度の符号と速度の変化が一致するか観察してください。</p>
-</section>
-<section class="panel" id="gravityComparison">
-<div class="titlebar"><h2>3方式・重力補正比較</h2><span class="chip">診断のみ / ZUPTなし / 3軸</span></div>
-<p>固定重力 A、ジャイロ推定重力 B、OS加速度 C を同時刻で比較。固定方式の基準は「端末座標」、姿勢変換の有無を独立に変更できます。各方式の欠測は補完しません。</p>
-<div class="actions graphControls">
-<label>成分<select id="compareAxis"><option value="0">X</option><option value="1" selected>Y</option><option value="2">Z</option></select></label>
-<label>量<select id="compareQuantity"><option value="raw">重力込み</option><option value="gravity">重力推定</option><option value="device">除去後・端末座標</option><option value="initial">除去後・初期座標</option><option value="velocity" selected>速度</option><option value="position">変位</option></select></label>
-<label>積分座標<select id="compareFrame"><option value="device" selected>端末座標</option><option value="initial">初期座標</option></select></label>
-<label>時間窓<select id="compareWindow"><option value="5">5秒</option><option value="15" selected>15秒</option><option value="30">30秒</option><option value="all">全履歴</option></select></label>
-</div><p class="hint">固定：橙 ／ 動的：緑 ／ OS：青。縦軸は選択した物理量、横軸は時間。ゼロ基準線を表示。</p>
-<div class="graphCard"><canvas id="comparisonCanvas" class="timeGraph" aria-label="3方式比較"></canvas></div>
-<p id="compareSummary" class="hint">補正完了後に表示します。</p>
-<div class="actions"><button id="compareCsv">比較CSV保存</button><button id="compareJson">比較JSON保存</button></div>
-</section>
-<section class="panel">
-<div class="titlebar"><h2>診断データ</h2><span class="chip">端末内のみ</span></div>
-<p>計測から座標まで同一時刻で保存。CSV・JSONを端末に書き出せます。記録はアップロードされません。</p>
-<div class="actions"><button id="recordStart" class="primary">● 記録開始</button><button id="recordStop" disabled>■ 記録停止</button><button id="csv" disabled>CSV保存</button><button id="json" disabled>JSON保存</button><button id="discard">記録破棄</button></div>
-<div class="status" id="recordInfo">未記録</div>
-<div class="actions"><button id="markStart">実測区間の開始</button><button id="markStop">実測区間の終了</button><label>実測X (cm)<input id="actualX" type="number" step="0.1" placeholder="任意"></label><label>実測Y (cm)<input id="actualY" type="number" step="0.1" placeholder="任意"></label></div>
-<p id="trialInfo" class="hint">実測座標を入力すると推定変位との誤差を計算します。</p>
-</section>
-<section class="panel">
-<div class="titlebar"><h2>既存CSVの再生と比較</h2><span class="chip">v6 / v7 CSV</span></div>
-<p>記録した平面加速度を固定して再積分します。原則として姿勢推定までは再実行せず、積分器と時刻基準を切り分けます。</p>
-<div class="actions"><label class="upload">CSVを選択<input id="importCsv" type="file" accept=".csv,text/csv"></label><label>入力列<select id="replaySource"><option value="anchor">補正前の平面加速度（推奨）</option><option value="processed">従来の補正後加速度</option></select></label><button id="replay" disabled>同一入力を再計算</button></div>
-<div class="status" id="replayInfo">CSV未読み込み</div>
-<div class="replayMetrics" id="replayResults"></div>
-<p class="hint">イベント時刻はJavaScript受信時刻です。公称間隔（e.interval）が真の測定時刻である保証もありません。2通りを併記して仮説を検証します。再生時の静止一致は記録済みの判定値を使用します。</p>
-</section>
-</div>
-<div class="stack">
-<section class="panel"><h2>比較条件</h2>
-<label class="field">可視化する推定系列<select id="track"><option value="native_constrained">OS加速度 / 静止補正あり</option><option value="native_free">OS加速度 / 静止補正なし</option><option value="estimated_constrained">独自重力除去 / 静止補正あり</option><option value="estimated_free">独自重力除去 / 静止補正なし</option></select></label>
-<div class="switch"><label><input id="zupt" type="checkbox" checked> 静止一致時に速度ゼロ補正を使用</label></div>
-<div class="field"><label for="threshold">初期静止値との差の許容閾値 <output id="thresholdValue">0.35 m/s²</output></label><input id="threshold" type="range" min="10" max="100" value="35" step="5"></div>
-<div class="field"><label for="scale">表示倍率 <output id="scaleValue">2500 px/m</output></label><input id="scale" type="range" min="200" max="6000" value="2500" step="100"></div>
-<div class="switch"><label><input id="flipY" type="checkbox" checked> 表示だけ上下反転する</label></div>
-<p class="hint">反転と倍率は描画だけに適用します。加速度・速度・位置の計算値は変えません。</p>
-<div class="info" id="calInfo">静止補正は未実行です。</div>
-</section>
-<section class="panel"><h2>処理の責任分割</h2>
-<div class="pipeline"><div><b>01 取得</b><span>DeviceMotion / 単位変換</span></div><div><b>02 姿勢</b><span>ジャイロ積分 / 動作中の重力更新抑制</span></div><div><b>03 平面</b><span>補正時の座標系に変換</span></div><div><b>04 推定</b><span>台形公式の二重積分（無加工）</span></div><div><b>05 制約</b><span>初期静止パターン照合 / ZUPTは別系列</span></div><div><b>06 検証</b><span>CSV・JSON / 同一入力の再計算</span></div></div>
-<p class="hint">静止一致は静止の証明ではありません。IMUだけでは静止と等速移動を原理的に区別できません。また、ブラウザが返すセンサー値はOS処理を経ている場合があります。</p>
-</section>
-<section class="panel"><h2>検証の読み方</h2><p>停止後の<strong>補正なし速度</strong>が残れば、単なる描画の問題ではなく、入力された加速度の時間積分に残差があります。姿勢を保った移動、持ち上げ移動、回転のみを別々に記録して比較してください。</p><p>OS加速度と独自重力除去の比較は、同じジャイロ姿勢推定を共有します。完全に独立したセンサーではありません。</p></section>
-</div>
-</main>
-<footer>zlib License · <a href="https://github.com/soone-y/Android-Mouse-PC-">Android-Mouse-PC-</a> · ログは明示的な操作で保存するまでメモリ内。通信・外部ライブラリなし。</footer>
+  <header>
+    <div><span class="eyebrow">IMU / MOTION RESEARCH</span><h1>Sensor Mouse Lab <span>Revamp</span></h1></div>
+    <div class="tag">計測・検証版 10</div>
+  </header>
+  <main>
+    <section class="panel start">
+      <h2>センサーと校正</h2>
+      <p class="notice">静止したスマホの3軸比力から初期重力方向を校正します。測定開始にはHTTPSまたはlocalhostが必要です。推定変位は実測位置を保証しません。</p>
+      <div class="toolbar">
+        <button id="start" class="primary">センサー開始</button>
+        <button id="calibrate">静止校正（1.5秒）</button>
+        <button id="stop">取得停止</button>
+        <button id="reset">推定リセット</button>
+      </div>
+      <p class="status" id="status" aria-live="polite">未開始</p>
+      <p class="muted" id="calInfo">初期校正：未実施</p>
+    </section>
+
+    <section class="panel">
+      <h2>変位推定 <small>固定された水平座標系 / 単位 m</small></h2>
+      <div class="controls">
+        <label>入力方式<select id="source"><option value="estimated">独自姿勢・重力補正</option><option value="native" selected>OSの線形加速度</option><option value="fixed">初期重力固定（比較専用）</option></select></label>
+        <label>積分方式<select id="integrator"><option value="constrained">静止候補で速度補正</option><option value="free">純粋積分（補正なし）</option></select></label>
+        <label class="check"><input id="zupt" type="checkbox" checked> 静止候補の自動ZUPTを有効化</label>
+      </div>
+      <div class="metrics">
+        <div><span>X変位</span><strong id="x">—</strong><small>cm</small></div>
+        <div><span>Y変位</span><strong id="y">—</strong><small>cm</small></div>
+        <div><span>速度</span><strong id="speed">—</strong><small>cm/s</small></div>
+        <div><span>独自-OS差</span><strong id="residual">—</strong><small>m/s²</small></div>
+      </div>
+      <div class="canvas-shell"><canvas id="plane" aria-label="X Y平面の推定軌跡"></canvas></div>
+      <div class="toolbar tiny"><label>縮尺 <input type="range" id="scale" min="200" max="5000" value="1300" step="100"> <output id="scaleValue">1300 px/m</output></label><button id="center">軌跡を中央へ</button><button id="clearPath">描画をクリア</button></div>
+      <p class="muted">緑：独自補正　青：OS補正　橙：初期重力固定。マウス・タッチで図をドラッグできます。初期姿勢が傾いていても、XYは重力に垂直な平面です。</p>
+    </section>
+
+    <section class="panel">
+      <h2>計測品質・姿勢診断</h2>
+      <div class="diagnostics">
+        <div><span>静止候補</span><strong id="quiet">—</strong></div>
+        <div><span>推定重力と測定比力の角差</span><strong id="tiltError">—</strong></div>
+        <div><span>姿勢補正累計</span><strong id="corrections">—</strong></div>
+        <div><span>欠落区間</span><strong id="gaps">—</strong></div>
+      </div>
+      <p class="muted">静止候補は加速度の時間的安定性・角速度・重力の大きさ・OS線形加速度から判定します。等速移動を静止と識別できないため、確定ではありません。運動中の角差は姿勢誤差そのものではありません。</p>
+      <div class="toolbar"><button id="confirmRest">いま静止したことを手動確定（速度0）</button></div>
+      <p id="restNotice" class="muted"></p>
+    </section>
+
+    <section class="panel">
+      <h2>加速度と速度のグラフ</h2>
+      <div class="controls">
+        <label>軸<select id="axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z（速度表示対象外）</option></select></label>
+        <label>時間幅<select id="window"><option value="5">5秒</option><option value="12" selected>12秒</option><option value="30">30秒</option><option value="90">90秒</option></select></label>
+      </div>
+      <h3>水平面加速度 <small>m/s²</small></h3><canvas id="accGraph" class="chart"></canvas>
+      <h3>積分速度 <small>m/s（純粋積分）</small></h3><canvas id="velGraph" class="chart"></canvas>
+      <h3>独自補正とOS補正の差 <small>m/s²（端末座標系）</small></h3><canvas id="diffGraph" class="chart"></canvas>
+      <p class="muted">グラフは測定値を無加工で比較できます。Z軸はXY変位推定に積分しません。静止時にも速度が残る現象を、純粋積分で確認できます。</p>
+    </section>
+
+    <section class="panel">
+      <h2>停止から停止までの区間補正 <small>実験機能</small></h2>
+      <p>開始・終了とも速度0だったと分かる区間について、加速度の一定バイアスを逆算して変位を再推定します。測定値自体は変更しません。</p>
+      <div class="toolbar"><button id="gestureStart">静止した開始位置を記録</button><button id="gestureEnd">静止した終了位置を記録・計算</button></div>
+      <div class="result" id="gestureResult">区間未指定</div>
+      <p class="muted">開始と終了でスマホを確実に停止させてください。バイアスが時間変化する場合、一定バイアス仮定の補正結果にも誤差が残ります。</p>
+    </section>
+
+    <section class="panel">
+      <h2>記録・比較・再生</h2>
+      <div class="toolbar"><button id="recordStart">記録開始</button><button id="recordStop">記録終了</button><button id="exportJson">JSON出力</button><button id="exportCsv">CSV出力</button></div>
+      <p class="muted" id="recordInfo">記録なし。全方式の生値・重力・姿勢・速度・変位を保存します。</p>
+      <label>既存CSV/JSONのオフライン再計算 <input type="file" id="importFile" accept=".csv,.json,text/csv,application/json"></label>
+      <div class="toolbar"><button id="replay">読み込んだ記録を再計算</button><button id="simulate">模擬データで検証</button></div>
+      <p id="replayInfo" class="muted">旧 comparison.csv / sensor-mouse-v7.csv の生データも再生できます。最初の1.5秒が静止している必要があります。</p>
+    </section>
+  </main>
+  <footer>Sensor Mouse Lab — 姿勢誤差・重力混入・積分ドリフトを区別するための検証ツール</footer>
 </body>
 </html>
