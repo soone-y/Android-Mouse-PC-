@@ -72,11 +72,14 @@ export class MotionPipeline {
   }
 }
 
-// devicemotion rotationRate fields are beta(X), gamma(Y), alpha(Z), degrees/s.
+// W3C 2026 Device Motion rotationRate: alpha(X), beta(Y), gamma(Z), degrees/s.
+// Older documentation describes another axis mapping, so raw API fields are also logged.
 export function parseMotionEvent(e,t){
   const v=obj=>obj&&[obj.x,obj.y,obj.z].every(Number.isFinite)?[obj.x,obj.y,obj.z]:null;
   const r=e.rotationRate;
-  const gyro=r&&[r.beta,r.gamma,r.alpha].every(Number.isFinite)?[r.beta,r.gamma,r.alpha].map(x=>x*Math.PI/180):null;
+  const gyro=r&&[r.alpha,r.beta,r.gamma].every(Number.isFinite)?[r.alpha,r.beta,r.gamma].map(x=>x*Math.PI/180):null;
   const eventTime=Number.isFinite(e.timeStamp)&&e.timeStamp>0&&e.timeStamp<1e10?e.timeStamp:t;
-  return {t:eventTime,raw:v(e.accelerationIncludingGravity),native:v(e.acceleration),gyro,interval:Number.isFinite(e.interval)?e.interval:null};
+  return {t:eventTime,raw:v(e.accelerationIncludingGravity),native:v(e.acceleration),gyro,
+    rotationRateDeg:r&&[r.alpha,r.beta,r.gamma].every(Number.isFinite)?[r.alpha,r.beta,r.gamma]:null,
+    interval:Number.isFinite(e.interval)?e.interval:null};
 }
